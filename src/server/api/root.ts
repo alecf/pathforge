@@ -4,6 +4,7 @@ import {
   createTRPCRouter,
   publicProcedure,
 } from "~/server/api/trpc";
+import { stravaRouter } from "./routers/strava";
 
 export const appRouter = createTRPCRouter({
   hello: publicProcedure
@@ -13,6 +14,7 @@ export const appRouter = createTRPCRouter({
         greeting: `Hello ${input.text}`,
       };
     }),
+  strava: stravaRouter,
 });
 
 // export type definition of API
