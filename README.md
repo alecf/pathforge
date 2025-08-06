@@ -1,6 +1,29 @@
-# Create T3 App
+# Strava Raceways
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
+This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app` and configured for Strava authentication.
+
+## Environment Variables
+
+Create a `.env` file in the root directory with the following variables (all are required):
+
+```env
+# Database
+DATABASE_URL="postgresql://username:password@localhost:5432/strava-raceways"
+
+# NextAuth
+AUTH_SECRET="your-auth-secret-here"
+
+# Strava OAuth (required)
+STRAVA_CLIENT_ID="your-strava-client-id"
+STRAVA_CLIENT_SECRET="your-strava-client-secret"
+```
+
+## Strava OAuth Setup
+
+1. Go to [Strava API Settings](https://www.strava.com/settings/api)
+2. Create a new application
+3. Set the Authorization Callback Domain to `localhost:9300` for development
+4. Copy the Client ID and Client Secret to your `.env` file
 
 ## What's next? How do I make an app with this?
 
