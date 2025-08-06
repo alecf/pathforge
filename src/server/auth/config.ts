@@ -64,5 +64,9 @@ export const authConfig = {
         id: user.id,
       },
     }),
+    signIn: async ({ user, account, email, profile }) => {
+      console.log("signIn", { user, account, email, profile });
+      return true;
+    },
   },
 } satisfies NextAuthConfig;
