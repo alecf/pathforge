@@ -48,12 +48,12 @@ export function AppHeader() {
               </Link>
             </div>
             <div className="flex items-center space-x-4">
-              <a
+              <Link
                 href="/api/auth/signin"
                 className="inline-flex items-center rounded-md border border-transparent bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:outline-none"
               >
                 Sign In
-              </a>
+              </Link>
             </div>
           </div>
         </div>
@@ -96,11 +96,11 @@ export function AppHeader() {
               >
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-600">
                   <span className="text-sm font-medium text-white">
-                    {session.user?.name?.[0] || session.user?.email?.[0] || "U"}
+                    {session.user?.name?.[0] ?? session.user?.email?.[0] ?? "U"}
                   </span>
                 </div>
                 <span className="text-gray-700">
-                  {session.user?.name || session.user?.email}
+                  {session.user?.name ?? session.user?.email}
                 </span>
                 <svg
                   className={`h-4 w-4 text-gray-400 transition-transform ${

@@ -5,6 +5,7 @@ import {
 } from "strava-v3";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
+import { getStravaAccessToken } from "~/server/auth/token-utils";
 
 export const stravaRouter = createTRPCRouter({
   athlete: createTRPCRouter({
@@ -26,21 +27,17 @@ export const stravaRouter = createTRPCRouter({
           throw new Error("User not authenticated");
         }
 
-        // Get the user's Strava access token from the database
-        const account = await ctx.db.query.accounts.findFirst({
-          where: (accounts, { eq, and }) =>
-            and(
-              eq(accounts.userId, session.user.id),
-              eq(accounts.provider, "strava"),
-            ),
-        });
+        // Get a valid access token (with automatic refresh if needed)
+        const accessToken = await getStravaAccessToken(session.user.id);
 
-        if (!account?.access_token) {
-          throw new Error("No Strava access token found");
+        if (!accessToken) {
+          throw new Error(
+            "No valid Strava access token found. Please sign in again.",
+          );
         }
 
         // Initialize Strava client with the user's access token
-        const strava = createStravaClient(account.access_token);
+        const strava = createStravaClient(accessToken);
 
         // Call the Strava API with the provided arguments
         const activities = await strava.athlete.listActivities(input ?? {});
