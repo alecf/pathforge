@@ -2,6 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
+import { decodePolyline } from "./StravaActivityMapUtils";
+
+// Helper function to get the number of points in a polyline
+function getPolylinePointCount(polyline: string | undefined): number {
+  if (!polyline) return 0;
+  return decodePolyline(polyline).length;
+}
+
+// Helper function to convert meters to miles
+function metersToMiles(meters: number): number {
+  return meters / 1609.34;
+}
 
 interface StravaActivityListProps {
   activities: DetailedActivityResponse[];
@@ -128,7 +140,9 @@ export function StravaActivityList({
                   )}
                   {hasMap && (
                     <p className="text-xs text-green-600">
-                      Route: {activity.map?.summary_polyline?.length ?? 0} chars
+                      Route:{" "}
+                      {getPolylinePointCount(activity.map?.summary_polyline)}{" "}
+                      points • {metersToMiles(activity.distance).toFixed(2)} mi
                     </p>
                   )}
                 </div>
