@@ -9,15 +9,17 @@ interface ActivityCardProps {
 
 function ActivityCard({ activity }: ActivityCardProps) {
   return (
-    <div className="rounded-lg bg-white/10 p-4 transition-colors hover:bg-white/20">
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition-colors hover:shadow-md">
       <div className="flex items-center justify-between">
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-white">{activity.name}</h3>
-          <p className="text-sm text-gray-300">
+          <h3 className="text-lg font-semibold text-gray-900">
+            {activity.name}
+          </h3>
+          <p className="text-sm text-gray-600">
             {activity.sport_type} •{" "}
             {new Date(activity.start_date).toLocaleDateString()}
           </p>
-          <div className="mt-2 flex gap-4 text-sm text-gray-300">
+          <div className="mt-2 flex gap-4 text-sm text-gray-600">
             {activity.distance && (
               <span>Distance: {(activity.distance / 1000).toFixed(2)} km</span>
             )}
@@ -34,10 +36,10 @@ function ActivityCard({ activity }: ActivityCardProps) {
         <div className="text-right">
           {activity.distance && (
             <>
-              <div className="text-2xl font-bold text-white">
+              <div className="text-2xl font-bold text-orange-600">
                 {(activity.distance / 1000).toFixed(1)}
               </div>
-              <div className="text-xs text-gray-300">km</div>
+              <div className="text-xs text-gray-500">km</div>
             </>
           )}
         </div>
@@ -58,7 +60,9 @@ export function StravaDashboard() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="text-lg">Loading your recent activities...</div>
+        <div className="text-lg text-gray-700">
+          Loading your recent activities...
+        </div>
       </div>
     );
   }
@@ -76,14 +80,14 @@ export function StravaDashboard() {
   if (!activities || activities.length === 0) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="text-lg">No activities found.</div>
+        <div className="text-lg text-gray-700">No activities found.</div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl p-6">
-      <h2 className="mb-6 text-2xl font-bold text-white">
+    <div className="mx-auto w-full max-w-4xl">
+      <h2 className="mb-6 text-2xl font-bold text-gray-900">
         Your Recent Activities
       </h2>
       <div className="grid gap-4">

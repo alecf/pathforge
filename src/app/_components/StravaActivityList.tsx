@@ -43,19 +43,19 @@ export function StravaActivityList({
   };
 
   return (
-    <div className="mb-6 rounded-lg bg-white/10 p-4">
+    <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-white">Activities</h3>
+        <h3 className="text-lg font-semibold text-gray-900">Activities</h3>
         <div className="flex gap-2">
           <button
             onClick={handleSelectAll}
-            className="rounded bg-white/20 px-3 py-1 text-sm text-white hover:bg-white/30"
+            className="rounded bg-orange-100 px-3 py-1 text-sm text-orange-700 hover:bg-orange-200"
           >
             Select All
           </button>
           <button
             onClick={handleSelectNone}
-            className="rounded bg-white/20 px-3 py-1 text-sm text-white hover:bg-white/30"
+            className="rounded bg-gray-100 px-3 py-1 text-sm text-gray-700 hover:bg-gray-200"
           >
             Select None
           </button>
@@ -73,7 +73,9 @@ export function StravaActivityList({
             <div
               key={activity.id}
               className={`mb-2 rounded p-3 transition-colors ${
-                isSelected ? "bg-white/20" : "bg-white/5"
+                isSelected
+                  ? "border border-orange-200 bg-orange-50"
+                  : "border border-gray-100 bg-gray-50"
               }`}
             >
               <div className="flex items-start gap-3">
@@ -90,31 +92,33 @@ export function StravaActivityList({
                 />
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <h4 className="font-medium text-white">{activity.name}</h4>
+                    <h4 className="font-medium text-gray-900">
+                      {activity.name}
+                    </h4>
                     {!hasMap && (
-                      <span className="rounded bg-red-500/20 px-2 py-1 text-xs text-red-300">
+                      <span className="rounded bg-red-100 px-2 py-1 text-xs text-red-700">
                         No route data
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-gray-300">
+                  <p className="text-sm text-gray-600">
                     {activity.sport_type} •{" "}
                     {new Date(activity.start_date).toLocaleDateString()}
                   </p>
                   {startLocation && (
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-500">
                       Start: {startLocation[0]?.toFixed(4)},{" "}
                       {startLocation[1]?.toFixed(4)}
                     </p>
                   )}
                   {endLocation && (
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-500">
                       End: {endLocation[0]?.toFixed(4)},{" "}
                       {endLocation[1]?.toFixed(4)}
                     </p>
                   )}
                   {hasMap && (
-                    <p className="text-xs text-green-400">
+                    <p className="text-xs text-green-600">
                       Route: {activity.map?.summary_polyline?.length ?? 0} chars
                     </p>
                   )}
@@ -125,7 +129,7 @@ export function StravaActivityList({
         })}
       </div>
 
-      <div className="mt-4 text-sm text-gray-300">
+      <div className="mt-4 text-sm text-gray-600">
         {selectedActivities.size} of {activities.length} activities selected
       </div>
     </div>

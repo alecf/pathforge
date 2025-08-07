@@ -22,17 +22,23 @@ export default function RecentMapPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="text-lg">Loading your recent activities...</div>
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center p-8">
+          <div className="text-lg text-gray-700">
+            Loading your recent activities...
+          </div>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="text-lg text-red-500">
-          Error loading activities: {error.message}
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center p-8">
+          <div className="text-lg text-red-500">
+            Error loading activities: {error.message}
+          </div>
         </div>
       </div>
     );
@@ -40,19 +46,23 @@ export default function RecentMapPage() {
 
   if (!activities || activities.length === 0) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="text-lg">No activities found.</div>
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex items-center justify-center p-8">
+          <div className="text-lg text-gray-700">No activities found.</div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl p-6">
+    <div className="container mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-white">Recent Activities Map</h1>
+        <h1 className="text-3xl font-bold text-gray-900">
+          Recent Activities Map
+        </h1>
         <Link
           href="/"
-          className="rounded-lg bg-white/10 px-4 py-2 font-semibold no-underline transition hover:bg-white/20"
+          className="rounded-lg bg-gray-100 px-4 py-2 font-semibold text-gray-700 no-underline transition hover:bg-gray-200"
         >
           ← Back to Dashboard
         </Link>
