@@ -68,14 +68,14 @@ export default function RecentMapPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-1">
+      <div className="flex flex-col gap-6 lg:h-[600px] lg:flex-row">
+        <div className="lg:w-1/3">
           <StravaActivityList
             activities={activities}
             onFilterChange={setFilteredActivities}
           />
         </div>
-        <div className="lg:col-span-2">
+        <div className="lg:w-2/3">
           <StravaActivityMap activities={filteredActivities} />
         </div>
       </div>

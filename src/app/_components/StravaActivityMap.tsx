@@ -106,7 +106,7 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
   }, []);
 
   return (
-    <div className="h-[600px] w-full overflow-hidden rounded-lg bg-gray-900">
+    <div className="h-full w-full overflow-hidden rounded-lg bg-gray-900">
       <svg
         ref={svgRef}
         width={dimensions.width}

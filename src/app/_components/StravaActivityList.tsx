@@ -64,8 +64,8 @@ export function StravaActivityList({
   };
 
   return (
-    <div className="mb-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="mb-4 flex flex-shrink-0 items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">Activities</h3>
         <div className="flex gap-2">
           <button
@@ -83,7 +83,7 @@ export function StravaActivityList({
         </div>
       </div>
 
-      <div className="max-h-64 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {activities.map((activity) => {
           const isSelected = selectedActivities.has(activity.id.toString());
           const hasMap = !!activity.map?.summary_polyline;
@@ -93,22 +93,26 @@ export function StravaActivityList({
           return (
             <div
               key={activity.id}
-              className={`mb-2 rounded p-3 transition-colors ${
+              className={`mb-2 cursor-pointer rounded p-3 transition-colors hover:shadow-sm ${
                 isSelected
                   ? "border border-orange-200 bg-orange-50"
-                  : "border border-gray-100 bg-gray-50"
+                  : "border border-gray-100 bg-gray-50 hover:bg-gray-100"
               }`}
+              onClick={() =>
+                handleActivityToggle(activity.id.toString(), !isSelected)
+              }
             >
               <div className="flex items-start gap-3">
                 <input
                   type="checkbox"
                   checked={isSelected}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    e.stopPropagation(); // Prevent card click when clicking checkbox
                     handleActivityToggle(
                       activity.id.toString(),
                       e.target.checked,
-                    )
-                  }
+                    );
+                  }}
                   className="mt-1"
                 />
                 <div className="flex-1">
@@ -152,7 +156,7 @@ export function StravaActivityList({
         })}
       </div>
 
-      <div className="mt-4 text-sm text-gray-600">
+      <div className="mt-4 flex-shrink-0 text-sm text-gray-600">
         {selectedActivities.size} of {activities.length} activities selected
       </div>
     </div>
