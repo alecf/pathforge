@@ -44,7 +44,7 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
 
     // Create projection
     const projection = createProjection(
-      boundingBox,
+      activities,
       dimensions.width,
       dimensions.height,
     );

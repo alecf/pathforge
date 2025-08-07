@@ -141,24 +141,37 @@ export function decodePolyline(
 }
 
 /**
- * Create a D3 projection that fits the bounding box to the given dimensions
- * @param boundingBox The bounding box of all activities
+ * Create a D3 projection that fits the actual route points to the given dimensions
+ * @param activities Array of Strava activities with decoded polylines
  * @param width Width of the container
  * @param height Height of the container
  * @returns D3 geo projection
  */
 export function createProjection(
-  boundingBox: BoundingBox,
+  activities: DetailedActivityResponse[],
   width: number,
   height: number,
 ) {
-  const { minLat, maxLat, minLng, maxLng } = boundingBox;
+  console.log("Creating projection for:", {
+    width,
+    height,
+    activityCount: activities.length,
+  });
 
-  console.log("Creating projection for:", { width, height, boundingBox });
+  // Get all route points from all activities
+  const allPoints: Array<[number, number]> = [];
 
-  // Check if bounding box is valid
-  if (minLat === maxLat || minLng === maxLng) {
-    console.warn("Invalid bounding box, using fallback projection");
+  activities.forEach((activity) => {
+    if (activity.map?.summary_polyline) {
+      const points = decodePolyline(activity.map.summary_polyline);
+      points.forEach((point) => {
+        allPoints.push([point.lng, point.lat]);
+      });
+    }
+  });
+
+  if (allPoints.length === 0) {
+    console.warn("No route points found, using fallback projection");
     return d3
       .geoMercator()
       .center([0, 0])
@@ -166,24 +179,28 @@ export function createProjection(
       .translate([width / 2, height / 2]);
   }
 
+  console.log("Total route points:", allPoints.length);
+
+  // Calculate bounds from actual route points
+  const lngs = allPoints.map((p) => p[0]);
+  const lats = allPoints.map((p) => p[1]);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+
+  console.log("Route point bounds:", { minLat, maxLat, minLng, maxLng });
+
   // Calculate center
   const centerLng = (minLng + maxLng) / 2;
   const centerLat = (minLat + maxLat) / 2;
 
-  // Create a GeoJSON feature collection from the bounding box
-  const bboxFeature = {
+  // Create a GeoJSON feature collection from the actual route points
+  const routeFeature = {
     type: "Feature" as const,
     geometry: {
-      type: "Polygon" as const,
-      coordinates: [
-        [
-          [minLng, minLat],
-          [maxLng, minLat],
-          [maxLng, maxLat],
-          [minLng, maxLat],
-          [minLng, minLat], // Close the polygon
-        ],
-      ],
+      type: "MultiPoint" as const,
+      coordinates: allPoints,
     },
     properties: {},
   };
@@ -201,7 +218,7 @@ export function createProjection(
 
   // Create a path generator to test the projection
   const path = d3.geoPath().projection(projection);
-  const bounds = path.bounds(bboxFeature);
+  const bounds = path.bounds(routeFeature);
 
   console.log("Initial bounds:", bounds);
 
@@ -266,9 +283,9 @@ export function projectActivities(
 
       const projectedPoints = points.map((point) => {
         const projected = projection([point.lng, point.lat]);
-        console.log(
-          `Projecting [${point.lng}, ${point.lat}] -> [${projected?.[0]}, ${projected?.[1]}]`,
-        );
+        // console.log(
+        //   `Projecting [${point.lng}, ${point.lat}] -> [${projected?.[0]}, ${projected?.[1]}]`,
+        // );
         const [x, y] = projected ?? [0, 0];
         return { x, y };
       });
