@@ -18,6 +18,14 @@ export default async function Home() {
 
           {session ? (
             <div className="w-full">
+              <div className="mb-6 flex gap-4">
+                <Link
+                  href="/recentmap"
+                  className="rounded-lg bg-white/10 px-6 py-3 font-semibold no-underline transition hover:bg-white/20"
+                >
+                  View Activity Map
+                </Link>
+              </div>
               <StravaDashboard />
             </div>
           ) : (
