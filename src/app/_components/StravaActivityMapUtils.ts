@@ -1,3 +1,4 @@
+import polyline from "@mapbox/polyline";
 import * as d3 from "d3";
 import { type DetailedActivityResponse } from "strava-v3";
 
@@ -100,53 +101,43 @@ export function calculateBoundingBox(
 export function decodePolyline(
   encoded: string,
 ): Array<{ lat: number; lng: number }> {
-  const points: Array<{ lat: number; lng: number }> = [];
-  let index = 0;
-  let lat = 0;
-  let lng = 0;
+  try {
+    // Use the reliable Mapbox polyline decoder
+    const decoded = polyline.decode(encoded);
 
-  console.log("Decoding polyline:", encoded.substring(0, 50) + "...");
+    // Convert from [lat, lng] arrays to {lat, lng} objects
+    const points = decoded.map(([lat, lng]) => ({ lat, lng }));
 
-  // Test with a known polyline first
-  if (encoded === "test") {
-    console.log("Testing with known polyline");
-    return [
-      { lat: 37.7749, lng: -122.4194 }, // San Francisco
-      { lat: 37.7849, lng: -122.4094 }, // Slightly north
-    ];
+    console.log("Decoded polyline:", encoded.substring(0, 50) + "...");
+    console.log("First few points:", points.slice(0, 3));
+    console.log("Total points:", points.length);
+
+    // Validate that we have reasonable coordinates (should be around 37, -122 for SF area)
+    if (points.length > 0) {
+      const firstPoint = points[0];
+      const lastPoint = points[points.length - 1];
+      console.log("Coordinate validation:");
+      console.log("  First point:", firstPoint);
+      console.log("  Last point:", lastPoint);
+      console.log(
+        "  Lat range:",
+        Math.min(...points.map((p) => p.lat)),
+        "to",
+        Math.max(...points.map((p) => p.lat)),
+      );
+      console.log(
+        "  Lng range:",
+        Math.min(...points.map((p) => p.lng)),
+        "to",
+        Math.max(...points.map((p) => p.lng)),
+      );
+    }
+
+    return points;
+  } catch (error) {
+    console.error("Error decoding polyline:", error);
+    return [];
   }
-
-  while (index < encoded.length) {
-    let shift = 0;
-    let result = 0;
-
-    do {
-      const b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (result >= 0x20);
-
-    const dlat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-    lat += dlat;
-
-    shift = 0;
-    result = 0;
-
-    do {
-      const b = encoded.charCodeAt(index++) - 63;
-      result |= (b & 0x1f) << shift;
-      shift += 5;
-    } while (result >= 0x20);
-
-    const dlng = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-    lng += dlng;
-
-    const point = { lat: lat / 1e5, lng: lng / 1e5 };
-    points.push(point);
-  }
-
-  console.log("Decoded points:", points.slice(0, 5), "...");
-  return points;
 }
 
 /**
@@ -181,35 +172,18 @@ export function createProjection(
   const latSpan = maxLat - minLat;
   const lngSpan = maxLng - minLng;
 
-  // Use a more aggressive scale calculation
-  const scale = Math.min(width / lngSpan, height / latSpan) * 0.6; // Reduced padding for larger scale
+  // Calculate appropriate scale with padding
+  const scale = Math.min(width / lngSpan, height / latSpan) * 0.8; // 20% padding
 
-  // If the scale is too small, use a minimum scale
-  const minScale = Math.min(width, height) * 0.1; // At least 10% of the smaller dimension
-  const finalScale = Math.max(scale, minScale);
-
-  // If the coordinate spans are very small, use a much larger scale
-  const verySmallSpan = latSpan < 0.01 || lngSpan < 0.01;
-  const adjustedScale = verySmallSpan ? finalScale * 100 : finalScale;
-
-  console.log(
-    "Center:",
-    [centerLng, centerLat],
-    "Scale:",
-    adjustedScale,
-    "Original scale:",
-    scale,
-    "Very small span:",
-    verySmallSpan,
-  );
+  console.log("Center:", [centerLng, centerLat], "Scale:", scale);
   console.log("Coordinate spans - Lat:", latSpan, "Lng:", lngSpan);
   console.log("Canvas dimensions - Width:", width, "Height:", height);
 
-  // Use standard Mercator projection with adjusted scale for small areas
+  // Use standard Mercator projection
   const projection = d3
     .geoMercator()
     .center([centerLng, centerLat])
-    .scale(adjustedScale)
+    .scale(scale)
     .translate([width / 2, height / 2]);
 
   // Test with a known coordinate
@@ -232,34 +206,6 @@ export function projectActivities(
 ): ProjectedActivity[] {
   const colors = d3.schemeCategory10;
 
-  // If no activities with polylines, create a test activity
-  if (activities.filter((a) => a.map?.summary_polyline).length === 0) {
-    console.log("No activities with polylines, creating test activity");
-    const testPoints = [
-      { lat: 37.7749, lng: -122.4194 }, // San Francisco
-      { lat: 37.7849, lng: -122.4094 }, // Slightly north
-      { lat: 37.7949, lng: -122.3994 }, // Further north
-    ];
-
-    const projectedTestPoints = testPoints.map((point) => {
-      const projected = projection([point.lng, point.lat]);
-      console.log(
-        `Test projecting [${point.lng}, ${point.lat}] -> [${projected?.[0]}, ${projected?.[1]}]`,
-      );
-      const [x, y] = projected ?? [0, 0];
-      return { x, y };
-    });
-
-    return [
-      {
-        id: "test",
-        name: "Test Activity",
-        points: projectedTestPoints,
-        color: colors[0] ?? "#000000",
-      },
-    ];
-  }
-
   return activities
     .filter(
       (
@@ -269,34 +215,12 @@ export function projectActivities(
       } => Boolean(activity.map?.summary_polyline),
     )
     .map((activity, index) => {
-      // For testing, let's try using start/end coordinates if polyline fails
-      let points: Array<{ lat: number; lng: number }> = [];
+      const points = decodePolyline(activity.map.summary_polyline);
+      console.log(`Activity ${activity.id}: ${points.length} points`);
 
-      try {
-        points = decodePolyline(activity.map.summary_polyline);
-        console.log(`Activity ${activity.id} raw points:`, points.slice(0, 3));
-      } catch (error) {
-        console.error(
-          `Error decoding polyline for activity ${activity.id}:`,
-          error,
-        );
-        // Fallback to start/end coordinates
-        if (activity.start_latlng && activity.end_latlng) {
-          points = [
-            {
-              lat: activity.start_latlng[0] ?? 0,
-              lng: activity.start_latlng[1] ?? 0,
-            },
-            {
-              lat: activity.end_latlng[0] ?? 0,
-              lng: activity.end_latlng[1] ?? 0,
-            },
-          ];
-          console.log(
-            `Using start/end coordinates for activity ${activity.id}:`,
-            points,
-          );
-        }
+      if (points.length === 0) {
+        console.warn(`No points decoded for activity ${activity.id}`);
+        return null;
       }
 
       const projectedPoints = points.map((point) => {
@@ -319,5 +243,6 @@ export function projectActivities(
         points: projectedPoints,
         color: colors[index % colors.length] ?? "#000000",
       };
-    });
+    })
+    .filter((activity): activity is ProjectedActivity => activity !== null);
 }
