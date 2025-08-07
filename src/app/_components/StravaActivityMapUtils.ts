@@ -166,31 +166,72 @@ export function createProjection(
       .translate([width / 2, height / 2]);
   }
 
-  // Calculate center and scale
+  // Calculate center
   const centerLng = (minLng + maxLng) / 2;
   const centerLat = (minLat + maxLat) / 2;
-  const latSpan = maxLat - minLat;
-  const lngSpan = maxLng - minLng;
 
-  // Calculate appropriate scale with padding
-  const scale = Math.min(width / lngSpan, height / latSpan) * 0.8; // 20% padding
+  // Create a GeoJSON feature collection from the bounding box
+  const bboxFeature = {
+    type: "Feature" as const,
+    geometry: {
+      type: "Polygon" as const,
+      coordinates: [
+        [
+          [minLng, minLat],
+          [maxLng, minLat],
+          [maxLng, maxLat],
+          [minLng, maxLat],
+          [minLng, minLat], // Close the polygon
+        ],
+      ],
+    },
+    properties: {},
+  };
 
-  console.log("Center:", [centerLng, centerLat], "Scale:", scale);
-  console.log("Coordinate spans - Lat:", latSpan, "Lng:", lngSpan);
-  console.log("Canvas dimensions - Width:", width, "Height:", height);
+  // Start with a strawman projection
+  let scale = 1;
+  let offset: [number, number] = [0, 0];
 
-  // Use standard Mercator projection
-  const projection = d3
-    .geoMercator()
+  let projection = d3
+    .geoAlbers()
     .center([centerLng, centerLat])
+    .parallels([minLat, maxLat])
     .scale(scale)
-    .translate([width / 2, height / 2]);
+    .translate(offset);
+
+  // Create a path generator to test the projection
+  const path = d3.geoPath().projection(projection);
+  const bounds = path.bounds(bboxFeature);
+
+  console.log("Initial bounds:", bounds);
+
+  // Calculate optimal scale and offset based on the projected bounds
+  scale =
+    0.95 /
+    Math.max(
+      (bounds[1][0] - bounds[0][0]) / width,
+      (bounds[1][1] - bounds[0][1]) / height,
+    );
+
+  offset = [
+    (width - scale * (bounds[1][0] + bounds[0][0])) / 2,
+    (height - scale * (bounds[1][1] + bounds[0][1])) / 2,
+  ];
+
+  console.log("Calculated scale:", scale, "offset:", offset);
+
+  // Create the final projection with optimal parameters
+  projection = d3
+    .geoAlbers()
+    .center([centerLng, centerLat])
+    .parallels([minLat, maxLat])
+    .scale(scale)
+    .translate(offset);
 
   // Test with a known coordinate
   const testPoint = projection([centerLng, centerLat]);
   console.log("Test projection of center:", testPoint);
 
-  console.log("Projection created:", projection);
   return projection;
 }
 

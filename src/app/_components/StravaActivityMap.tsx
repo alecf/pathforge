@@ -21,10 +21,6 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
     ProjectedActivity[]
   >([]);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
-  const [viewBox, setViewBox] = useState("0 0 800 600");
-  const [scaleFactor, setScaleFactor] = useState(1);
-  const [translateX, setTranslateX] = useState(0);
-  const [translateY, setTranslateY] = useState(0);
 
   useEffect(() => {
     if (!activities.length || !svgRef.current) return;
@@ -42,15 +38,6 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
       })),
     );
 
-    // Test with a simple activity first
-    const firstActivity = activities.find((a) => a.map?.summary_polyline);
-    if (firstActivity?.map?.summary_polyline) {
-      console.log(
-        "Testing first activity polyline:",
-        firstActivity.map.summary_polyline.substring(0, 100),
-      );
-    }
-
     // Calculate bounding box
     const boundingBox = calculateBoundingBox(activities);
     console.log("Bounding box:", boundingBox);
@@ -64,16 +51,21 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
 
     // Project activities
     const projected = projectActivities(activities, projection);
-    console.log("projected ", projected, " from ", activities);
-    setProjectedActivities(projected);
+    console.log("Projected activities:", projected.length);
 
-    // Calculate viewBox from projected coordinates
+    // Debug: Log some projected coordinates
     if (projected.length > 0) {
+      const firstActivity = projected[0]!;
+      console.log(
+        "First activity projected points:",
+        firstActivity.points.slice(0, 5),
+      );
+
+      // Calculate bounds of projected coordinates
       let minX = Infinity,
         maxX = -Infinity,
         minY = Infinity,
         maxY = -Infinity;
-
       projected.forEach((activity) => {
         activity.points.forEach((point) => {
           minX = Math.min(minX, point.x);
@@ -82,51 +74,11 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
           maxY = Math.max(maxY, point.y);
         });
       });
-
-      // Calculate scale factor to make the route more visible
-      const routeWidth = maxX - minX;
-      const routeHeight = maxY - minY;
-      const svgWidth = dimensions.width;
-      const svgHeight = dimensions.height;
-
-      // Calculate scale to fit the route in 80% of the SVG area
-      const scaleX = (svgWidth * 0.8) / Math.max(routeWidth, 1);
-      const scaleY = (svgHeight * 0.8) / Math.max(routeHeight, 1);
-      const newScaleFactor = Math.min(scaleX, scaleY, 100); // Increased cap to 100x for very small routes
-
-      // Calculate center of the route
-      const routeCenterX = (minX + maxX) / 2;
-      const routeCenterY = (minY + maxY) / 2;
-      const svgCenterX = svgWidth / 2;
-      const svgCenterY = svgHeight / 2;
-
-      console.log("Route dimensions:", routeWidth, "x", routeHeight);
-      console.log("SVG dimensions:", svgWidth, "x", svgHeight);
-      console.log(
-        "Scale factors - X:",
-        scaleX,
-        "Y:",
-        scaleY,
-        "Final:",
-        newScaleFactor,
-      );
-      console.log(
-        "Route center:",
-        [routeCenterX, routeCenterY],
-        "SVG center:",
-        [svgCenterX, svgCenterY],
-      );
-
-      // Calculate translation to center the route
-      const newTranslateX = svgCenterX - routeCenterX * newScaleFactor;
-      const newTranslateY = svgCenterY - routeCenterY * newScaleFactor;
-
-      console.log("Translation:", [newTranslateX, newTranslateY]);
-
-      setScaleFactor(newScaleFactor);
-      setTranslateX(newTranslateX);
-      setTranslateY(newTranslateY);
+      console.log("Projected coordinate bounds:", { minX, maxX, minY, maxY });
+      console.log("SVG dimensions:", dimensions);
     }
+
+    setProjectedActivities(projected);
   }, [activities, dimensions]);
 
   useEffect(() => {
@@ -134,10 +86,10 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
       if (svgRef.current) {
         const container = svgRef.current.parentElement;
         if (container) {
-          setDimensions({
-            width: container.clientWidth,
-            height: Math.max(400, container.clientHeight),
-          });
+          const width = container.clientWidth;
+          const height = 600; // Match the fixed height of the container
+          setDimensions({ width, height });
+          console.log("Updated SVG dimensions:", { width, height });
         }
       }
     };
@@ -166,10 +118,7 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
         </defs>
 
         {projectedActivities.map((activity) => (
-          <g
-            key={activity.id}
-            transform={`translate(${translateX}, ${translateY}) scale(${scaleFactor})`}
-          >
+          <g key={activity.id}>
             <path
               d={
                 d3
