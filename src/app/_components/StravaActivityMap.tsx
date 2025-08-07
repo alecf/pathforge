@@ -23,7 +23,13 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   useEffect(() => {
-    if (!activities.length || !svgRef.current) return;
+    if (!svgRef.current) return;
+
+    // If no activities, clear the map
+    if (!activities.length) {
+      setProjectedActivities([]);
+      return;
+    }
 
     console.log(
       "Activities received:",
