@@ -44,6 +44,87 @@ export const stravaRouter = createTRPCRouter({
 
         return activities as DetailedActivityResponse[];
       }),
+
+    getActivity: protectedProcedure
+      .input(z.object({ id: z.string() }))
+      .query(async ({ input, ctx }) => {
+        // Get the user's access token from the session
+        const session = ctx.session;
+        if (!session?.user?.id) {
+          throw new Error("User not authenticated");
+        }
+
+        // Get a valid access token (with automatic refresh if needed)
+        const accessToken = await getStravaAccessToken(session.user.id);
+
+        if (!accessToken) {
+          throw new Error(
+            "No valid Strava access token found. Please sign in again.",
+          );
+        }
+
+        // Initialize Strava client with the user's access token
+        const strava = createStravaClient(accessToken);
+
+        // Call the Strava API to get detailed activity data
+        const activity = await strava.activities.get({ id: input.id });
+
+        return activity;
+      }),
+
+    getActivitiesBatch: protectedProcedure
+      .input(z.object({ ids: z.array(z.string()) }))
+      .query(async ({ input, ctx }) => {
+        // Get the user's access token from the session
+        const session = ctx.session;
+        if (!session?.user?.id) {
+          throw new Error("User not authenticated");
+        }
+
+        // Get a valid access token (with automatic refresh if needed)
+        const accessToken = await getStravaAccessToken(session.user.id);
+
+        if (!accessToken) {
+          throw new Error(
+            "No valid Strava access token found. Please sign in again.",
+          );
+        }
+
+        // Initialize Strava client with the user's access token
+        const strava = createStravaClient(accessToken);
+
+        // Fetch all activities in parallel
+        const activityPromises = input.ids.map(async (id) => {
+          try {
+            const activity = await strava.activities.get({ id });
+            return { id, activity, success: true as const };
+          } catch (error) {
+            console.error(`Failed to fetch activity ${id}:`, error);
+            return { id, error: error as Error, success: false as const };
+          }
+        });
+
+        const results = await Promise.all(activityPromises);
+
+        // Separate successful and failed requests
+        const successful = results.filter(
+          (
+            r,
+          ): r is {
+            id: string;
+            activity: DetailedActivityResponse;
+            success: true;
+          } => r.success,
+        );
+        const failed = results.filter(
+          (r): r is { id: string; error: Error; success: false } => !r.success,
+        );
+
+        return {
+          activities: successful.map((r) => r.activity),
+          failed: failed.map((r) => ({ id: r.id, error: r.error.message })),
+        };
+      }),
   }),
 });
 

@@ -146,7 +146,11 @@ export function StravaActivityList({
                     <p className="text-xs text-green-600">
                       Route:{" "}
                       {getPolylinePointCount(activity.map?.summary_polyline)}{" "}
-                      points • {metersToMiles(activity.distance).toFixed(2)} mi
+                      points •{" "}
+                      {activity.distance
+                        ? metersToMiles(activity.distance).toFixed(2)
+                        : "0"}{" "}
+                      mi
                     </p>
                   )}
                 </div>

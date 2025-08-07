@@ -1,44 +1,42 @@
 "use client";
 
-import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
-import { StravaActivityList } from "~/app/_components/StravaActivityList";
-import { StravaActivityMap } from "~/app/_components/StravaActivityMap";
-import { api } from "~/trpc/react";
+import { StravaActivityList } from "../_components/StravaActivityList";
+import { StravaActivityMap } from "../_components/StravaActivityMap";
+import { useActivities } from "../_components/StravaActivityMapUtils";
 
+const activityParams = {
+  per_page: 10,
+};
 export default function RecentMapPage() {
-  const {
-    data: activities,
-    isLoading,
-    error,
-  } = api.strava.athlete.listActivities.useQuery({
-    per_page: 10,
-  });
+  const { activities, isLoading, error, detailErrors, isLoadingDetails } =
+    useActivities(activityParams);
 
   const [filteredActivities, setFilteredActivities] = useState<
     DetailedActivityResponse[]
   >([]);
 
+  // Update filtered activities when activities change
+  useEffect(() => {
+    if (activities && activities.length > 0) {
+      setFilteredActivities(activities);
+    }
+  }, [activities]); // Only depend on the length to avoid re-renders
+
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center p-8">
-          <div className="text-lg text-gray-700">
-            Loading your recent activities...
-          </div>
-        </div>
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-lg text-gray-700">Loading activities...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center p-8">
-          <div className="text-lg text-red-500">
-            Error loading activities: {error.message}
-          </div>
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-lg text-red-500">
+          Error loading activities: {error.message}
         </div>
       </div>
     );
@@ -46,38 +44,32 @@ export default function RecentMapPage() {
 
   if (!activities || activities.length === 0) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-center p-8">
-          <div className="text-lg text-gray-700">No activities found.</div>
-        </div>
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-lg text-gray-700">No activities found.</div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">
-          Recent Activities Map
-        </h1>
-        <Link
-          href="/"
-          className="rounded-lg bg-gray-100 px-4 py-2 font-semibold text-gray-700 no-underline transition hover:bg-gray-200"
-        >
-          ← Back to Dashboard
-        </Link>
+    <div className="flex h-screen">
+      <div className="w-80 flex-shrink-0">
+        <StravaActivityList
+          activities={activities}
+          onFilterChange={setFilteredActivities}
+        />
       </div>
-
-      <div className="flex flex-col gap-6 lg:h-[600px] lg:flex-row">
-        <div className="lg:w-1/3">
-          <StravaActivityList
-            activities={activities}
-            onFilterChange={setFilteredActivities}
-          />
-        </div>
-        <div className="lg:w-2/3">
-          <StravaActivityMap activities={filteredActivities} />
-        </div>
+      <div className="flex-1">
+        {isLoadingDetails && (
+          <div className="absolute top-4 right-4 z-10 rounded bg-blue-50 p-3 text-sm text-blue-700">
+            Loading detailed activity data...
+          </div>
+        )}
+        {detailErrors.length > 0 && (
+          <div className="absolute top-4 right-4 z-10 rounded bg-yellow-50 p-3 text-sm text-yellow-700">
+            Some activity details failed to load ({detailErrors.length} errors)
+          </div>
+        )}
+        <StravaActivityMap activities={filteredActivities} />
       </div>
     </div>
   );

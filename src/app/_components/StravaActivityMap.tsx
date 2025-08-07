@@ -4,7 +4,6 @@ import * as d3 from "d3";
 import { useEffect, useRef, useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
 import {
-  calculateBoundingBox,
   createProjection,
   projectActivities,
   type ProjectedActivity,
@@ -44,10 +43,6 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
       })),
     );
 
-    // Calculate bounding box
-    const boundingBox = calculateBoundingBox(activities);
-    console.log("Bounding box:", boundingBox);
-
     // Create projection
     const projection = createProjection(
       activities,
@@ -57,7 +52,6 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
 
     // Project activities
     const projected = projectActivities(activities, projection);
-    console.log("Projected activities:", projected.length);
 
     // Debug: Log some projected coordinates
     if (projected.length > 0) {
@@ -80,8 +74,6 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
           maxY = Math.max(maxY, point.y);
         });
       });
-      console.log("Projected coordinate bounds:", { minX, maxX, minY, maxY });
-      console.log("SVG dimensions:", dimensions);
     }
 
     setProjectedActivities(projected);
