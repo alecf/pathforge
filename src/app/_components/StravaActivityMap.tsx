@@ -6,12 +6,13 @@ import { type DetailedActivityResponse } from "strava-v3";
 import {
   createProjection,
   projectActivities,
+  type ActivityWithStreams,
   type ProjectedActivity,
   type ProjectedPoint,
 } from "./StravaActivityMapUtils";
 
 interface StravaActivityMapProps {
-  activities: DetailedActivityResponse[];
+  activities: (DetailedActivityResponse | ActivityWithStreams)[];
 }
 
 export function StravaActivityMap({ activities }: StravaActivityMapProps) {
@@ -36,8 +37,9 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
         id: a.id,
         name: a.name,
         hasMap: !!a.map,
-        hasPolyline: !!a.map?.summary_polyline,
-        polylineLength: a.map?.summary_polyline?.length ?? 0,
+        hasPolyline: !!(a.map?.polyline ?? a.map?.summary_polyline),
+        polylineLength:
+          (a.map?.polyline ?? a.map?.summary_polyline)?.length ?? 0,
         startLatlng: a.start_latlng,
         endLatlng: a.end_latlng,
       })),
@@ -55,12 +57,6 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
 
     // Debug: Log some projected coordinates
     if (projected.length > 0) {
-      const firstActivity = projected[0]!;
-      console.log(
-        "First activity projected points:",
-        firstActivity.points.slice(0, 5),
-      );
-
       // Calculate bounds of projected coordinates
       let minX = Infinity,
         maxX = -Infinity,
@@ -85,7 +81,7 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
         const container = svgRef.current.parentElement;
         if (container) {
           const width = container.clientWidth;
-          const height = 600; // Match the fixed height of the container
+          const height = container.clientHeight;
           setDimensions({ width, height });
           console.log("Updated SVG dimensions:", { width, height });
         }

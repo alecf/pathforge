@@ -1,10 +1,13 @@
 "use client";
 
 import { type DetailedActivityResponse } from "strava-v3";
-import { useActivities } from "./StravaActivityMapUtils";
+import {
+  useActivities,
+  type ActivityWithStreams,
+} from "./StravaActivityMapUtils";
 
 interface ActivityCardProps {
-  activity: DetailedActivityResponse;
+  activity: DetailedActivityResponse | ActivityWithStreams;
 }
 
 function ActivityCard({ activity }: ActivityCardProps) {
@@ -33,12 +36,12 @@ function ActivityCard({ activity }: ActivityCardProps) {
             )}
             {activity.total_elevation_gain && (
               <span>
-                Elevation: {activity.total_elevation_gain.toFixed(0)} m
+                Elevation Gain: {activity.total_elevation_gain.toFixed(0)} m
               </span>
             )}
           </div>
           {/* Show additional details if available from detailed activity data */}
-          {activity.map?.summary_polyline && (
+          {(activity.map?.polyline ?? activity.map?.summary_polyline) && (
             <p className="mt-1 text-xs text-green-600">Route data available</p>
           )}
         </div>

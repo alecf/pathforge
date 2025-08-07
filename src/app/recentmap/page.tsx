@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
 import { StravaActivityList } from "../_components/StravaActivityList";
 import { StravaActivityMap } from "../_components/StravaActivityMap";
-import { useActivities } from "../_components/StravaActivityMapUtils";
+import {
+  useActivities,
+  type ActivityWithStreams,
+} from "../_components/StravaActivityMapUtils";
 
 const activityParams = {
   per_page: 10,
@@ -14,7 +17,7 @@ export default function RecentMapPage() {
     useActivities(activityParams);
 
   const [filteredActivities, setFilteredActivities] = useState<
-    DetailedActivityResponse[]
+    (DetailedActivityResponse | ActivityWithStreams)[]
   >([]);
 
   // Update filtered activities when activities change
@@ -26,7 +29,7 @@ export default function RecentMapPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <div className="text-lg text-gray-700">Loading activities...</div>
       </div>
     );
@@ -34,7 +37,7 @@ export default function RecentMapPage() {
 
   if (error) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <div className="text-lg text-red-500">
           Error loading activities: {error.message}
         </div>
@@ -44,21 +47,21 @@ export default function RecentMapPage() {
 
   if (!activities || activities.length === 0) {
     return (
-      <div className="flex h-screen items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <div className="text-lg text-gray-700">No activities found.</div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen">
-      <div className="w-80 flex-shrink-0">
+    <>
+      <div className="w-80 flex-shrink-0 overflow-y-auto">
         <StravaActivityList
           activities={activities}
           onFilterChange={setFilteredActivities}
         />
       </div>
-      <div className="flex-1">
+      <div className="relative flex-1">
         {isLoadingDetails && (
           <div className="absolute top-4 right-4 z-10 rounded bg-blue-50 p-3 text-sm text-blue-700">
             Loading detailed activity data...
@@ -71,6 +74,6 @@ export default function RecentMapPage() {
         )}
         <StravaActivityMap activities={filteredActivities} />
       </div>
-    </div>
+    </>
   );
 }

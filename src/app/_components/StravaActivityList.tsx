@@ -86,7 +86,9 @@ export function StravaActivityList({
       <div className="min-h-0 flex-1 overflow-y-auto">
         {activities.map((activity) => {
           const isSelected = selectedActivities.has(activity.id.toString());
-          const hasMap = !!activity.map?.summary_polyline;
+          const hasMap = !!(
+            activity.map?.polyline ?? activity.map?.summary_polyline
+          );
           const startLocation = activity.start_latlng;
           const endLocation = activity.end_latlng;
 
@@ -145,7 +147,10 @@ export function StravaActivityList({
                   {hasMap && (
                     <p className="text-xs text-green-600">
                       Route:{" "}
-                      {getPolylinePointCount(activity.map?.summary_polyline)}{" "}
+                      {getPolylinePointCount(
+                        activity.map?.polyline ??
+                          activity.map?.summary_polyline,
+                      )}{" "}
                       points •{" "}
                       {activity.distance
                         ? metersToMiles(activity.distance).toFixed(2)

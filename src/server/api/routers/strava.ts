@@ -7,6 +7,21 @@ import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "~/server/api/trpc";
 import { getStravaAccessToken } from "~/server/auth/token-utils";
 
+export interface StravaActivityStream {
+  /** The type of stream - "latlng" or "altitude" or "distance" */
+  type: string;
+  /** The series type - seems to always be "distance" */
+  series_type: string;
+  /** The original size of the data */
+  original_size: number;
+  /** The resolution of the data, "high" or "low" */
+  resolution: string;
+  /** The actual data - either a number (for altitude, distance) or an array of numbers (for lat/lng) */
+  data: (number | number[])[];
+}
+
+type StravaActivityStreams = StravaActivityStream[];
+
 export const stravaRouter = createTRPCRouter({
   athlete: createTRPCRouter({
     listActivities: protectedProcedure
@@ -70,6 +85,49 @@ export const stravaRouter = createTRPCRouter({
         const activity = await strava.activities.get({ id: input.id });
 
         return activity;
+      }),
+
+    getActivityStreams: protectedProcedure
+      .input(
+        z.object({
+          id: z.string(),
+          keys: z.array(z.string()).optional(),
+          key_by_type: z.boolean().optional(),
+        }),
+      )
+      .query(async ({ input, ctx }) => {
+        // Get the user's access token from the session
+        const session = ctx.session;
+        if (!session?.user?.id) {
+          throw new Error("User not authenticated");
+        }
+
+        // Get a valid access token (with automatic refresh if needed)
+        const accessToken = await getStravaAccessToken(session.user.id);
+
+        if (!accessToken) {
+          throw new Error(
+            "No valid Strava access token found. Please sign in again.",
+          );
+        }
+
+        // Initialize Strava client with the user's access token
+        const strava = createStravaClient(accessToken);
+
+        try {
+          // Call the Strava API to get activity streams
+          const streams = await strava.streams.activity({
+            id: input.id,
+            types: input.keys,
+            keys: input.keys?.join(","),
+            key_by_type: input.key_by_type,
+          });
+
+          return streams as StravaActivityStreams;
+        } catch (error) {
+          console.error("Error fetching activity streams:", error);
+          throw error;
+        }
       }),
 
     getActivitiesBatch: protectedProcedure

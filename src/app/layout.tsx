@@ -26,9 +26,9 @@ export default function RootLayout({
       <body>
         <SessionProvider>
           <TRPCReactProvider>
-            <div className="min-h-screen bg-gray-50">
+            <div className="flex h-screen flex-col bg-gray-50">
               <AppHeader />
-              <main className="flex-1">{children}</main>
+              <main className="flex flex-1 overflow-hidden">{children}</main>
             </div>
           </TRPCReactProvider>
         </SessionProvider>

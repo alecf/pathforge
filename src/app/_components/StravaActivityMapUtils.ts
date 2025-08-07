@@ -1,7 +1,8 @@
 import polyline from "@mapbox/polyline";
 import * as d3 from "d3";
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
+import type { StravaActivityStream } from "~/server/api/routers/strava";
 import { api } from "~/trpc/react";
 import { useStable } from "~/util/useStable";
 
@@ -10,8 +11,8 @@ export interface BoundingBox {
   maxLat: number;
   minLng: number;
   maxLng: number;
-  minElevation?: number;
-  maxElevation?: number;
+  minAltitude?: number;
+  maxAltitude?: number;
 }
 
 export interface ProjectedPoint {
@@ -20,7 +21,7 @@ export interface ProjectedPoint {
   z: number;
   lat: number;
   lng: number;
-  elevation: number;
+  altitude: number;
 }
 
 export interface ProjectedActivity {
@@ -30,98 +31,47 @@ export interface ProjectedActivity {
   color: string;
 }
 
-/**
- * Calculate bounding box for all activities including elevation
- * @param activities Array of Strava activities (can be basic or detailed)
- * @returns BoundingBox with min/max lat/lng/elevation values
- */
-export function calculateBoundingBox(
-  activities: DetailedActivityResponse[],
-): BoundingBox {
-  if (!activities.length) {
-    return { minLat: 0, maxLat: 0, minLng: 0, maxLng: 0 };
-  }
+// More specific interfaces for typed streams
+export interface LatLngStream extends StravaActivityStream {
+  type: "latlng";
+  data: Array<[number, number]>; // [lat, lng] pairs
+}
 
-  let minLat = Infinity;
-  let maxLat = -Infinity;
-  let minLng = Infinity;
-  let maxLng = -Infinity;
-  let minElevation = Infinity;
-  let maxElevation = -Infinity;
+export interface AltitudeStream extends StravaActivityStream {
+  type: "altitude";
+  data: number[]; // altitude values
+}
 
-  activities.forEach((activity) => {
-    if (activity.map?.summary_polyline) {
-      // Use detailed elevation data if available, otherwise use basic polyline
-      const points = decodePolyline(
-        activity.map.summary_polyline,
-        activity.map?.summary_polyline ? undefined : undefined, // Will be updated to use detailed data
-      );
-      points.forEach((point) => {
-        minLat = Math.min(minLat, point.lat);
-        maxLat = Math.max(maxLat, point.lat);
-        minLng = Math.min(minLng, point.lng);
-        maxLng = Math.max(maxLng, point.lng);
-
-        // Include elevation if available
-        if (point.elevation !== undefined) {
-          minElevation = Math.min(minElevation, point.elevation);
-          maxElevation = Math.max(maxElevation, point.elevation);
-        }
-      });
-    } else {
-      console.log(`Activity ${activity.id}: No polyline data`);
-    }
-  });
-
-  // Check if we have valid coordinates
-  if (
-    minLat === Infinity ||
-    maxLat === -Infinity ||
-    minLng === Infinity ||
-    maxLng === -Infinity
-  ) {
-    return { minLat: -90, maxLat: 90, minLng: -180, maxLng: 180 };
-  }
-
-  // Add padding to the bounding box
-  const latPadding = (maxLat - minLat) * 0.1;
-  const lngPadding = (maxLng - minLng) * 0.1;
-
-  const result: BoundingBox = {
-    minLat: minLat - latPadding,
-    maxLat: maxLat + latPadding,
-    minLng: minLng - lngPadding,
-    maxLng: maxLng + lngPadding,
-  };
-
-  // Include elevation bounds if we have elevation data
-  if (minElevation !== Infinity && maxElevation !== -Infinity) {
-    result.minElevation = minElevation;
-    result.maxElevation = maxElevation;
-  }
-
-  return result;
+// New interface for activities with streams data
+export interface ActivityWithStreams extends DetailedActivityResponse {
+  detailedPoints?: Array<{
+    lng: number;
+    lat: number;
+    altitude: number;
+    lnglat_resolution: string;
+    altitude_resolution: string;
+  }>;
 }
 
 /**
- * Decode Google's polyline format to array of lat/lng/elevation points
+ * Decode Google's polyline format to array of lat/lng/altitude points
  * @param encoded Encoded polyline string from Strava
- * @param elevationData Optional elevation data array from detailed activity
- * @returns Array of lat/lng/elevation coordinates
+ * @param altitudeData Optional altitude data array from detailed activity
+ * @returns Array of lat/lng/altitude coordinates
  */
 export function decodePolyline(
   encoded: string,
-  elevationData?: number[],
-): Array<{ lat: number; lng: number; elevation?: number }> {
+  altitudeData?: number[],
+): Array<{ lat: number; lng: number; altitude?: number }> {
   try {
     // Use the reliable Mapbox polyline decoder
     const decoded = polyline.decode(encoded);
 
-    // Convert from [lat, lng] arrays to {lat, lng, elevation} objects
+    // Convert from [lat, lng] arrays to {lat, lng, altitude} objects
     const points = decoded.map(([lat, lng], index) => ({
       lat,
       lng,
-      elevation: elevationData?.[index],
+      altitude: altitudeData?.[index],
     }));
 
     return points;
@@ -133,14 +83,25 @@ export function decodePolyline(
 
 /**
  * Get the best available route data for an activity
- * Prioritizes detailed activity data over basic activity data
+ * Prioritizes streams data over polylines for more accurate coordinates and altitude
  */
-export function getActivityRouteData(activity: DetailedActivityResponse) {
-  // If we have detailed activity data with elevation points, use that
-  if (activity.map?.summary_polyline && activity.map?.summary_polyline) {
-    // For now, we'll use the basic polyline. In a full implementation,
-    // you'd want to check if this is a detailed activity with elevation data
-    const points = decodePolyline(activity.map.summary_polyline);
+export function getActivityRouteData(
+  activity: DetailedActivityResponse | ActivityWithStreams,
+) {
+  // First try to use streams data if available (most accurate)
+  if ("detailedPoints" in activity && activity.detailedPoints) {
+    return activity.detailedPoints.map((point) => ({
+      lat: point.lat,
+      lng: point.lng,
+      altitude: point.altitude,
+    }));
+  }
+
+  // Fall back to polyline data if streams not available
+  const polylineData = activity.map?.polyline ?? activity.map?.summary_polyline;
+
+  if (polylineData) {
+    const points = decodePolyline(polylineData);
     return points;
   }
 
@@ -155,13 +116,16 @@ export function getActivityRouteData(activity: DetailedActivityResponse) {
  * @returns D3 geo projection
  */
 export function createProjection(
-  activities: DetailedActivityResponse[],
+  activities: (DetailedActivityResponse | ActivityWithStreams)[],
   width: number,
   height: number,
 ) {
   // Get all route points from all activities
   const allPoints: Array<[number, number]> = [];
 
+  if (activities.length > 1) {
+    console.log("first activity", activities[0]);
+  }
   activities.forEach((activity) => {
     const routeData = getActivityRouteData(activity);
     routeData.forEach((point) => {
@@ -245,48 +209,34 @@ export function createProjection(
  * @returns Array of projected activities with x/y/z coordinates
  */
 export function projectActivities(
-  activities: DetailedActivityResponse[],
+  activities: (DetailedActivityResponse | ActivityWithStreams)[],
   projection: d3.GeoProjection,
 ): ProjectedActivity[] {
   const colors = d3.schemeCategory10;
 
-  // Calculate elevation bounds across all activities
-  let minElevation = Infinity;
-  let maxElevation = -Infinity;
-  let hasElevationData = false;
+  // Calculate altitude bounds across all activities
+  let minAltitude = Infinity;
+  let maxAltitude = -Infinity;
+  let hasAltitudeData = false;
 
-  // First pass: collect elevation data to determine bounds
+  // First pass: collect altitude data to determine bounds
   activities.forEach((activity) => {
     const routeData = getActivityRouteData(activity);
 
-    // Check if we have actual elevation data from detailed activity
-    const hasDetailedElevation = routeData.some(
-      (point) => point.elevation !== undefined,
-    );
-
-    if (hasDetailedElevation) {
-      routeData.forEach((point) => {
-        if (point.elevation !== undefined) {
-          minElevation = Math.min(minElevation, point.elevation);
-          maxElevation = Math.max(maxElevation, point.elevation);
-          hasElevationData = true;
-        }
-      });
-    } else if (
-      activity.total_elevation_gain &&
-      activity.total_elevation_gain > 0
-    ) {
-      // Fallback to total elevation gain if no detailed elevation data
-      minElevation = Math.min(minElevation, 0); // Start at sea level
-      maxElevation = Math.max(maxElevation, activity.total_elevation_gain);
-      hasElevationData = true;
-    }
+    // Only use actual altitude data from detailed activity points
+    routeData.forEach((point) => {
+      if (point.altitude !== undefined) {
+        minAltitude = Math.min(minAltitude, point.altitude);
+        maxAltitude = Math.max(maxAltitude, point.altitude);
+        hasAltitudeData = true;
+      }
+    });
   });
 
-  // If no elevation data, use fallback values
-  if (!hasElevationData) {
-    minElevation = 0;
-    maxElevation = 100;
+  // If no altitude data, default both to 0
+  if (!hasAltitudeData) {
+    minAltitude = 0;
+    maxAltitude = 0;
   }
 
   return activities
@@ -294,8 +244,8 @@ export function projectActivities(
       (
         activity,
       ): activity is DetailedActivityResponse & {
-        map: { summary_polyline: string };
-      } => Boolean(activity.map?.summary_polyline),
+        map: { polyline?: string; summary_polyline?: string };
+      } => Boolean(activity.map?.polyline ?? activity.map?.summary_polyline),
     )
     .map((activity, index) => {
       const routeData = getActivityRouteData(activity);
@@ -304,31 +254,17 @@ export function projectActivities(
         return null;
       }
 
-      const projectedPoints = routeData.map((point, pointIndex) => {
+      const projectedPoints = routeData.map((point) => {
         const projected = projection([point.lng, point.lat]);
         const [x, y] = projected ?? [0, 0];
 
-        // Project elevation to z coordinate
+        // Project altitude to z coordinate
         let z = 0;
-        if (hasElevationData) {
-          if (point.elevation !== undefined) {
-            // Use actual elevation data from detailed activity
-            z =
-              ((point.elevation - minElevation) /
-                (maxElevation - minElevation)) *
-              100;
-          } else if (
-            activity.total_elevation_gain &&
-            activity.total_elevation_gain > 0
-          ) {
-            // Fallback to estimated elevation based on total elevation gain
-            const progress = pointIndex / (routeData.length - 1);
-            const elevation =
-              activity.total_elevation_gain * Math.sin(progress * Math.PI);
-            z =
-              ((elevation - minElevation) / (maxElevation - minElevation)) *
-              100;
-          }
+        if (hasAltitudeData && point.altitude !== undefined) {
+          // Use actual altitude data from detailed activity
+          z =
+            ((point.altitude - minAltitude) / (maxAltitude - minAltitude)) *
+            100;
         }
 
         return {
@@ -337,12 +273,7 @@ export function projectActivities(
           z,
           lat: point.lat,
           lng: point.lng,
-          elevation:
-            point.elevation ??
-            (activity.total_elevation_gain
-              ? activity.total_elevation_gain *
-                Math.sin((pointIndex / (routeData.length - 1)) * Math.PI)
-              : 0),
+          altitude: point.altitude ?? 0,
         };
       });
 
@@ -357,34 +288,52 @@ export function projectActivities(
 }
 
 /**
- * Custom hook to fetch detailed activity data for multiple activities
- * Uses React Query's useQueries to cache each activity individually
- *
- * @example
- * ```tsx
- * function MyComponent() {
- *   const basicActivities = api.strava.athlete.listActivities.useQuery({ per_page: 10 });
- *   const activityIds = basicActivities.data?.map(a => a.id.toString()) ?? [];
- *   const { activities: detailedActivities, isLoading } = useDetailedActivities(activityIds);
- *
- *   return (
- *     <div>
- *       {isLoading && <div>Loading details...</div>}
- *       {detailedActivities.map(activity => (
- *         <ActivityCard key={activity.id} activity={activity} />
- *       ))}
- *     </div>
- *   );
- * }
- * ```
+ * Merge latlng and altitude streams into a flat array of detailed points
+ * @param latlngStream Array of [lat, lng] coordinates from Strava streams API
+ * @param altitudeStream Array of altitude values from Strava streams API
+ * @param lnglatResolution Resolution of the latlng stream
+ * @param altitudeResolution Resolution of the altitude stream
+ * @returns Array of detailed points with lng, lat, altitude, and resolution data
  */
-export function useDetailedActivities(activityIds: string[]) {
+export function mergeStreamsData(
+  latlngStream?: Array<[number, number]>,
+  altitudeStream?: number[],
+  lnglatResolution?: string,
+  altitudeResolution?: string,
+): ActivityWithStreams["detailedPoints"] {
+  if (!latlngStream || latlngStream.length === 0) {
+    return [];
+  }
+
+  return latlngStream.map(([lat, lng], index) => ({
+    lng,
+    lat,
+    altitude: altitudeStream?.[index] ?? 0,
+    lnglat_resolution: lnglatResolution ?? "unknown",
+    altitude_resolution: altitudeResolution ?? "unknown",
+  }));
+}
+
+/**
+ * Custom hook to fetch detailed activity data with streams for multiple activities
+ * Uses React Query's useQueries to cache each activity individually
+ */
+export function useDetailedActivitiesWithStreams(activityIds: string[]) {
   // Use TRPC's built-in utilities for multiple queries
-  const queries = useStable(
-    api.useQueries(
-      useCallback(
-        (t) => activityIds.map((id) => t.strava.athlete.getActivity({ id })),
-        [activityIds],
+  const activityQueries = useStable(
+    api.useQueries((t) =>
+      activityIds.map((id) => t.strava.athlete.getActivity({ id })),
+    ),
+  );
+
+  const streamsQueries = useStable(
+    api.useQueries((t) =>
+      activityIds.map((id) =>
+        t.strava.athlete.getActivityStreams({
+          id,
+          keys: ["latlng", "altitude"],
+          key_by_type: true,
+        }),
       ),
     ),
   );
@@ -392,27 +341,75 @@ export function useDetailedActivities(activityIds: string[]) {
   // Extract data and loading states
   const activities = useMemo(
     () =>
-      queries
+      activityQueries
         .map((q) => q.data)
         .filter((data): data is DetailedActivityResponse => data !== undefined),
-    [queries],
+    [activityQueries],
   );
-  const isLoading = queries.some((q) => q.isLoading);
+
+  const streamsData = useMemo(
+    () =>
+      streamsQueries.map((q) => q.data).filter((data) => data !== undefined),
+    [streamsQueries],
+  );
+
+  // Merge activities with their streams data
+  const activitiesWithStreams = useMemo(
+    () =>
+      activities.map((activity, index) => {
+        const streams = streamsData[index];
+        if (index === 0) {
+          console.log("streams", streams);
+          console.log("streams structure:", JSON.stringify(streams, null, 2));
+        }
+        if (!streams) return activity;
+
+        // Handle the actual streams response structure - it's an array of StravaActivityStream objects
+        const streamsArray = streams;
+
+        // Find the latlng and altitude streams
+        const latlngStream = streamsArray.find(
+          (stream) => stream.type === "latlng",
+        );
+        const altitudeStream = streamsArray.find(
+          (stream) => stream.type === "altitude",
+        );
+
+        const detailedPoints = mergeStreamsData(
+          latlngStream?.data as Array<[number, number]>,
+          altitudeStream?.data as number[],
+          latlngStream?.resolution,
+          altitudeStream?.resolution,
+        );
+
+        return {
+          ...activity,
+          detailedPoints,
+        } as ActivityWithStreams;
+      }),
+    [activities, streamsData],
+  );
+
+  const isLoading =
+    activityQueries.some((q) => q.isLoading) ||
+    streamsQueries.some((q) => q.isLoading);
   const errors = useMemo(
     () =>
-      queries
+      [...activityQueries, ...streamsQueries]
         .map((q) => q.error)
         .filter((error) => error !== null && error !== undefined),
-    [queries],
+    [activityQueries, streamsQueries],
   );
 
   return {
-    activities,
+    activities: activitiesWithStreams,
     isLoading,
     errors,
-    queries, // Expose individual query states if needed
+    activityQueries,
+    streamsQueries,
   };
 }
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const EMPTY_ARRAY = [] satisfies any[];
 /**
@@ -432,7 +429,7 @@ export function useActivities(options?: {
     error: basicError,
   } = api.strava.athlete.listActivities.useQuery(options ?? {});
 
-  // Extract activity IDs and fetch detailed data
+  // Extract activity IDs and fetch detailed data with streams
   const activityIds = useMemo(
     () => getActivityIds(basicActivities ?? EMPTY_ARRAY),
     [basicActivities],
@@ -441,7 +438,7 @@ export function useActivities(options?: {
     activities: detailedActivities,
     isLoading: isLoadingDetails,
     errors: detailErrors,
-  } = useDetailedActivities(activityIds);
+  } = useDetailedActivitiesWithStreams(activityIds);
 
   // Create a map of detailed activities by ID for quick lookup
   const detailedActivitiesMap = useMemo(
