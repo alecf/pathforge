@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
 import { decodePolyline } from "./StravaActivityMapUtils";
 
@@ -27,15 +27,6 @@ export function StravaActivityList({
   const [selectedActivities, setSelectedActivities] = useState<Set<string>>(
     new Set(activities.map((a) => a.id.toString())),
   );
-
-  // Update selected activities when the activities prop changes
-  useEffect(() => {
-    if (activities.length > 0) {
-      const allIds = new Set(activities.map((a) => a.id.toString()));
-      setSelectedActivities(allIds);
-      onFilterChange(activities);
-    }
-  }, [activities, onFilterChange]);
 
   const handleActivityToggle = (activityId: string, checked: boolean) => {
     const newSelected = new Set(selectedActivities);
