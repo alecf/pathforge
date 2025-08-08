@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
 import { StravaActivityList } from "../_components/StravaActivityList";
-import { StravaActivityMap } from "../_components/StravaActivityMap";
+import { StravaActivityMapTabs } from "../_components/StravaActivityMapTabs";
 import {
   useActivities,
   type ActivityWithStreams,
@@ -72,7 +72,7 @@ export default function RecentMapPage() {
             Some activity details failed to load ({detailErrors.length} errors)
           </div>
         )}
-        <StravaActivityMap activities={filteredActivities} />
+        <StravaActivityMapTabs activities={filteredActivities} />
       </div>
     </>
   );

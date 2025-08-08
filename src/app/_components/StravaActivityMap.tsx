@@ -3,31 +3,41 @@
 import * as d3 from "d3";
 import { useEffect, useRef, useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
+import { useMapProjection } from "~/util/mapUtils";
 import {
-  createProjection,
-  projectActivities,
   type ActivityWithStreams,
-  type ProjectedActivity,
   type ProjectedPoint,
 } from "./StravaActivityMapUtils";
 
 interface StravaActivityMapProps {
   activities: (DetailedActivityResponse | ActivityWithStreams)[];
+  width?: number;
+  height?: number;
 }
 
-export function StravaActivityMap({ activities }: StravaActivityMapProps) {
+export function StravaActivityMap({
+  activities,
+  width,
+  height,
+}: StravaActivityMapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [projectedActivities, setProjectedActivities] = useState<
-    ProjectedActivity[]
-  >([]);
-  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [dimensions, setDimensions] = useState({
+    width: width ?? 800,
+    height: height ?? 600,
+  });
+
+  // Use shared projection logic
+  const { projectedActivities } = useMapProjection({
+    activities,
+    width: dimensions.width,
+    height: dimensions.height,
+  });
 
   useEffect(() => {
     if (!svgRef.current) return;
 
     // If no activities, clear the map
     if (!activities.length) {
-      setProjectedActivities([]);
       return;
     }
 
@@ -45,24 +55,14 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
       })),
     );
 
-    // Create projection
-    const projection = createProjection(
-      activities,
-      dimensions.width,
-      dimensions.height,
-    );
-
-    // Project activities
-    const projected = projectActivities(activities, projection);
-
     // Debug: Log some projected coordinates
-    if (projected.length > 0) {
+    if (projectedActivities.length > 0) {
       // Calculate bounds of projected coordinates
       let minX = Infinity,
         maxX = -Infinity,
         minY = Infinity,
         maxY = -Infinity;
-      projected.forEach((activity) => {
+      projectedActivities.forEach((activity) => {
         activity.points.forEach((point) => {
           minX = Math.min(minX, point.x);
           maxX = Math.max(maxX, point.x);
@@ -71,9 +71,7 @@ export function StravaActivityMap({ activities }: StravaActivityMapProps) {
         });
       });
     }
-
-    setProjectedActivities(projected);
-  }, [activities, dimensions]);
+  }, [activities, projectedActivities]);
 
   useEffect(() => {
     const updateDimensions = () => {
