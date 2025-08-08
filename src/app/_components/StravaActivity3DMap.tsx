@@ -1,13 +1,17 @@
 "use client";
 
-import { Grid, Html, Line, OrbitControls } from "@react-three/drei";
+import { Grid, Line, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { GeoProjection } from "d3";
+import { useEffect, useMemo, useRef } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
-import type { PerspectiveCamera } from "three";
 import { Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import { calculateAltitudeBounds, useMapProjection } from "~/util/mapUtils";
+import {
+  calculateAltitudeBounds,
+  deriveGridSpacings,
+  useMapProjection,
+} from "~/util/mapUtils";
 import {
   type ActivityWithStreams,
   type ProjectedActivity,
@@ -91,16 +95,24 @@ function ActivityLine({
 interface GroundGridProps {
   projectedActivities: ProjectedActivity[];
   bounds: { minX: number; maxX: number; minY: number; maxY: number };
+  projection: GeoProjection;
 }
 
 function GroundGrid({
-  projectedActivities: _projectedActivities,
+  projectedActivities,
   bounds,
+  projection,
 }: GroundGridProps) {
-  // Grid spacing in projected coordinate units
-  // Since coordinates are projected to fit the view, we'll use a reasonable spacing
-  const gridSpacing = 50; // Minor grid lines
-  const majorGridSpacing = 200; // Major grid lines
+  // Pick a representative point for center lat/lng (midpoint of first activity with data)
+  const sampleActivity = projectedActivities.find((a) => a.points?.length);
+  const midPoint = sampleActivity
+    ? sampleActivity.points[Math.floor(sampleActivity.points.length / 2)]
+    : undefined;
+
+  const { cellSize: gridSpacing, sectionSize: majorGridSpacing } =
+    midPoint && Number.isFinite(midPoint.lat) && Number.isFinite(midPoint.lng)
+      ? deriveGridSpacings(projection, midPoint.lng, midPoint.lat, bounds)
+      : { cellSize: 50, sectionSize: 200 };
 
   return (
     <Grid
@@ -125,7 +137,7 @@ function GroundGrid({
   );
 }
 
-interface DynamicClippingAndHudProps {
+interface DynamicClippingProps {
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
   altitudeBounds: {
     minAltitude: number;
@@ -137,10 +149,9 @@ interface DynamicClippingAndHudProps {
   sizeX: number;
   sizeZ: number;
   autoClip: boolean;
-  setAutoClip: (value: boolean) => void;
 }
 
-function DynamicClippingAndHud({
+function DynamicClipping({
   controlsRef,
   altitudeBounds,
   centerX,
@@ -148,18 +159,8 @@ function DynamicClippingAndHud({
   sizeX,
   sizeZ,
   autoClip,
-  setAutoClip,
-}: DynamicClippingAndHudProps) {
+}: DynamicClippingProps) {
   const { camera } = useThree();
-  const [metrics, setMetrics] = useState({
-    camPos: [0, 0, 0] as [number, number, number],
-    target: [0, 0, 0] as [number, number, number],
-    fov: 60,
-    near: 0.1,
-    far: 10000,
-    distance: 0,
-    radius: 0,
-  });
 
   // Compute static model radius from bounds
   const altitudeSpan = altitudeBounds.hasAltitudeData ? 100 : 0;
@@ -210,55 +211,9 @@ function DynamicClippingAndHud({
         );
       }
     }
-
-    setMetrics({
-      camPos: [camPos.x, camPos.y, camPos.z],
-      target: [target.x, target.y, target.z],
-      fov: (camera as PerspectiveCamera).fov ?? 60,
-      near: camera.near,
-      far: camera.far,
-      distance,
-      radius: modelRadius,
-    });
   });
 
-  return (
-    <Html transform={false} prepend>
-      <div
-        className="pointer-events-auto absolute bottom-4 left-4 z-20 max-w-[90vw] rounded bg-black/60 p-2 text-xs text-white"
-        style={{ backdropFilter: "blur(4px)" }}
-      >
-        <div className="mb-1 font-semibold">3D Debug</div>
-        <div>
-          Camera pos: [{metrics.camPos.map((n) => n.toFixed(1)).join(", ")}]
-        </div>
-        <div>
-          Target: [{metrics.target.map((n) => n.toFixed(1)).join(", ")}]
-        </div>
-        <div>
-          fov: {metrics.fov.toFixed(1)} | near: {metrics.near.toFixed(2)} | far:{" "}
-          {metrics.far.toFixed(0)}
-        </div>
-        <div>
-          distance: {metrics.distance.toFixed(1)} | radius:{" "}
-          {metrics.radius.toFixed(1)}
-        </div>
-        <div>
-          bounds size X/Z: {sizeX.toFixed(1)} / {sizeZ.toFixed(1)} | center X/Z:{" "}
-          {centerX.toFixed(1)} / {centerZ.toFixed(1)}
-        </div>
-        <button
-          className="mt-1 rounded bg-blue-600 px-2 py-0.5 text-[10px] hover:bg-blue-700"
-          onClick={(e) => {
-            e.stopPropagation();
-            setAutoClip(!autoClip);
-          }}
-        >
-          Auto clip: {autoClip ? "on" : "off"}
-        </button>
-      </div>
-    </Html>
-  );
+  return null;
 }
 
 export function StravaActivity3DMap({
@@ -267,8 +222,7 @@ export function StravaActivity3DMap({
   height,
 }: StravaActivity3DMapProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
-  const [autoClip, setAutoClip] = useState(true);
-  const { projectedActivities } = useMapProjection({
+  const { projectedActivities, projection } = useMapProjection({
     activities,
     width,
     height,
@@ -354,7 +308,11 @@ export function StravaActivity3DMap({
         <pointLight position={[-10, -10, -5]} intensity={0.5} />
 
         {/* Ground grid on XZ plane at y=0 */}
-        <GroundGrid projectedActivities={projectedActivities} bounds={bounds} />
+        <GroundGrid
+          projectedActivities={projectedActivities}
+          bounds={bounds}
+          projection={projection}
+        />
 
         {/* Activity lines */}
         <ActivityLines
@@ -376,16 +334,15 @@ export function StravaActivity3DMap({
           target={[centerX, 0, centerZ]} // Look at the center on the ground plane
         />
 
-        {/* Dynamic clipping + on-screen HUD */}
-        <DynamicClippingAndHud
+        {/* Dynamic clipping */}
+        <DynamicClipping
           controlsRef={controlsRef}
           altitudeBounds={altitudeBounds}
           centerX={centerX}
           centerZ={centerZ}
           sizeX={sizeX}
           sizeZ={sizeZ}
-          autoClip={autoClip}
-          setAutoClip={setAutoClip}
+          autoClip={true}
         />
       </Canvas>
     </div>

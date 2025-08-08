@@ -1,9 +1,10 @@
-import * as d3 from "d3";
+import type * as d3 from "d3";
 import { type DetailedActivityResponse } from "strava-v3";
 import {
   type ActivityWithStreams,
   type ProjectedActivity,
   createProjection,
+  decodePolyline as decodePolylineHelper,
   projectActivities,
 } from "~/app/_components/StravaActivityMapUtils";
 
@@ -97,30 +98,7 @@ export function getActivityRouteData(
 /**
  * Decode Google's polyline format to array of lat/lng/altitude points
  */
-export function decodePolyline(
-  encoded: string,
-  altitudeData?: number[],
-): Array<{ lat: number; lng: number; altitude?: number }> {
-  try {
-    // Use the reliable Mapbox polyline decoder
-    const polyline = require("@mapbox/polyline");
-    const decoded = polyline.decode(encoded);
-
-    // Convert from [lat, lng] arrays to {lat, lng, altitude} objects
-    const points = decoded.map(
-      ([lat, lng]: [number, number], index: number) => ({
-        lat,
-        lng,
-        altitude: altitudeData?.[index],
-      }),
-    );
-
-    return points;
-  } catch (error) {
-    console.error("Error decoding polyline:", error);
-    return [];
-  }
-}
+export const decodePolyline = decodePolylineHelper;
 
 /**
  * Convert miles to meters for grid calculations
@@ -134,4 +112,85 @@ export function milesToMeters(miles: number): number {
  */
 export function metersToMiles(meters: number): number {
   return meters / 1609.344;
+}
+
+/**
+ * Rough miles per degree at a given latitude
+ * - Latitude: ~69 miles/deg
+ * - Longitude: ~69 * cos(latitude) miles/deg
+ */
+export function getMilesPerDegree(latitudeDeg: number): {
+  milesPerDegreeLat: number;
+  milesPerDegreeLng: number;
+} {
+  const latRad = (latitudeDeg * Math.PI) / 180;
+  const milesPerDegreeLat = 69;
+  const milesPerDegreeLng = Math.max(1e-6, 69 * Math.cos(latRad));
+  return { milesPerDegreeLat, milesPerDegreeLng };
+}
+
+/**
+ * Estimate the number of projected units that correspond to one mile around a center point.
+ * Returns null if projection fails.
+ */
+export function estimateProjectedUnitsPerMile(
+  projection: d3.GeoProjection,
+  centerLng: number,
+  centerLat: number,
+): number | null {
+  const base = projection([centerLng, centerLat]);
+  if (!base) return null;
+
+  const { milesPerDegreeLat, milesPerDegreeLng } = getMilesPerDegree(centerLat);
+  const oneMileLatDeg = 1 / milesPerDegreeLat;
+  const oneMileLngDeg = 1 / milesPerDegreeLng;
+
+  const lngShift = projection([centerLng + oneMileLngDeg, centerLat]);
+  const latShift = projection([centerLng, centerLat + oneMileLatDeg]);
+  if (!lngShift || !latShift) return null;
+
+  const mileInProjUnitsX = Math.abs(lngShift[0] - base[0]);
+  const mileInProjUnitsY = Math.abs(latShift[1] - base[1]);
+  const avg = (mileInProjUnitsX + mileInProjUnitsY) / 2;
+  if (!Number.isFinite(avg) || avg <= 0) return null;
+  return avg;
+}
+
+/**
+ * Compute grid spacings (minor and major) based on projection and center point.
+ * Minor is quarter-mile, major is one-mile. Applies clamping relative to bounds.
+ */
+export function deriveGridSpacings(
+  projection: d3.GeoProjection,
+  centerLng: number,
+  centerLat: number,
+  bounds: { minX: number; maxX: number; minY: number; maxY: number },
+): { cellSize: number; sectionSize: number } {
+  // defaults
+  let cellSize = 50;
+  let sectionSize = 200;
+
+  const unitsPerMile = estimateProjectedUnitsPerMile(
+    projection,
+    centerLng,
+    centerLat,
+  );
+
+  if (unitsPerMile) {
+    cellSize = Math.max(1, unitsPerMile * 0.25);
+    sectionSize = Math.max(1, unitsPerMile);
+
+    const maxExtent = Math.max(
+      bounds.maxX - bounds.minX,
+      bounds.maxY - bounds.minY,
+    );
+    const maxMajor = Math.max(10, maxExtent / 2);
+    if (sectionSize > maxMajor) {
+      const scale = maxMajor / sectionSize;
+      sectionSize *= scale;
+      cellSize *= scale;
+    }
+  }
+
+  return { cellSize, sectionSize };
 }
