@@ -3,15 +3,17 @@
 import { Grid, Line, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import type { GeoProjection } from "d3";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
 import { Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import { densify, type DensePoint } from "~/util/densifyUtils";
 import {
   calculateAltitudeBounds,
   deriveGridSpacings,
   useMapProjection,
 } from "~/util/mapUtils";
+import { DenseTerrainMesh } from "./DenseTerrainMesh";
 import {
   type ActivityWithStreams,
   type ProjectedActivity,
@@ -222,6 +224,9 @@ export function StravaActivity3DMap({
   height,
 }: StravaActivity3DMapProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
+  const [densePoints, setDensePoints] = useState<DensePoint[]>([]);
+  const [isDensifying, setIsDensifying] = useState(false);
+  const [showDenseTerrain, setShowDenseTerrain] = useState(false);
   const { projectedActivities, projection } = useMapProjection({
     activities,
     width,
@@ -270,6 +275,29 @@ export function StravaActivity3DMap({
   const maxSize = Math.max(sizeX, sizeZ);
   const cameraDistance = Math.max(maxSize * 3, 300); // Position camera further out, with minimum distance
 
+  const handleDensify = async () => {
+    if (projectedActivities.length === 0) return;
+
+    setIsDensifying(true);
+    try {
+      console.log("🚀 Starting terrain densification...");
+      const result = await densify(projectedActivities, {
+        method: "auto", // Auto-select best available method
+        density: 8, // Adjust density as needed
+        debug: true, // Enable debug logging
+      });
+      setDensePoints(result.densePoints);
+      setShowDenseTerrain(true);
+      console.log(
+        `✅ Terrain generation complete: ${result.densePoints.length} points`,
+      );
+    } catch (error) {
+      console.error("❌ Densification failed:", error);
+    } finally {
+      setIsDensifying(false);
+    }
+  };
+
   return (
     <div className="relative h-full w-full overflow-hidden rounded-lg bg-gray-900">
       {/* Help text overlay */}
@@ -280,17 +308,36 @@ export function StravaActivity3DMap({
         <div>Reset: Return to overview</div>
       </div>
 
-      {/* Reset view button */}
-      <button
-        onClick={() => {
-          if (controlsRef.current) {
-            controlsRef.current.reset();
-          }
-        }}
-        className="absolute top-4 right-4 z-10 rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700"
-      >
-        Reset View
-      </button>
+      {/* Control buttons */}
+      <div className="absolute top-4 right-4 z-10 flex gap-2">
+        <button
+          onClick={handleDensify}
+          disabled={isDensifying}
+          className="rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-50"
+        >
+          {isDensifying ? "Densifying..." : "Generate Terrain"}
+        </button>
+
+        {showDenseTerrain && (
+          <button
+            onClick={() => setShowDenseTerrain(!showDenseTerrain)}
+            className="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700"
+          >
+            {showDenseTerrain ? "Hide Terrain" : "Show Terrain"}
+          </button>
+        )}
+
+        <button
+          onClick={() => {
+            if (controlsRef.current) {
+              controlsRef.current.reset();
+            }
+          }}
+          className="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700"
+        >
+          Reset View
+        </button>
+      </div>
 
       <Canvas
         camera={{
@@ -319,6 +366,33 @@ export function StravaActivity3DMap({
           projectedActivities={projectedActivities}
           altitudeBounds={altitudeBounds}
         />
+
+        {/* Dense terrain */}
+        {showDenseTerrain && densePoints.length > 0 && (
+          <>
+            <DenseTerrainMesh
+              densePoints={densePoints}
+              pointSize={3}
+              color="#4ade80"
+              opacity={0.4}
+            />
+            {/* Alternative surface rendering - uncomment to use */}
+            {/* <DenseTerrainSurface
+              densePoints={densePoints}
+              bounds={{
+                minX: bounds.minX,
+                maxX: bounds.maxX,
+                minY: bounds.minY,
+                maxY: bounds.maxY,
+                minZ: altitudeBounds.minAltitude,
+                maxZ: altitudeBounds.maxAltitude,
+              }}
+              resolution={30}
+              color="#22c55e"
+              opacity={0.2}
+            /> */}
+          </>
+        )}
 
         {/* Controls */}
         <OrbitControls
