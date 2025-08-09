@@ -43,7 +43,6 @@ export function DensificationDemo() {
   const [availableMethods, setAvailableMethods] = useState<
     Array<{ method: string; name: string; description: string }>
   >([]);
-  const [punetAvailable] = useState<boolean>(false);
 
   useEffect(() => {
     // Check what methods are available
@@ -99,16 +98,6 @@ export function DensificationDemo() {
       <div className="rounded bg-blue-50 p-3">
         <h3 className="mb-2 font-semibold">System Status</h3>
         <div className="space-y-1 text-sm">
-          <div>
-            🤖 PU-Net Model:{" "}
-            {punetAvailable ? (
-              <span className="font-semibold text-green-600">✅ Available</span>
-            ) : (
-              <span className="font-semibold text-orange-600">
-                ⚠️ Not Available
-              </span>
-            )}
-          </div>
           <div>📊 Available Methods: {availableMethods.length}</div>
         </div>
       </div>

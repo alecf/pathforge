@@ -1,6 +1,6 @@
 # Densification for 3D Terrain Generation (Non‑ML)
 
-This implementation provides a browser-based PU-Net model for densifying activity points to create detailed 3D terrain visualization using **actual pre-trained PU-Net models**.
+This implementation provides a browser-based non‑ML densification to create detailed 3D terrain visualization using MLS smoothing and interpolation.
 
 ## Features
 
@@ -20,14 +20,14 @@ import { densify } from "~/util/densifyUtils";
 
 // Auto-select best available method (recommended)
 const densePoints = await densify(projectedActivities, {
-  method: "auto", // Chooses PU-Net if available, otherwise interpolation
+  method: "auto", // uses MLS by default
   density: 10, // points per unit distance
   debug: true, // Enable performance monitoring
 });
 
 // Or specify a particular method
-const punetPoints = await densify(projectedActivities, {
-  method: "pu-net", // Requires pre-trained model
+const mlsPoints = await densify(projectedActivities, {
+  method: "mls",
   density: 8,
 });
 ```
@@ -43,7 +43,7 @@ The 3D map component now includes a "Generate Terrain" button that will:
 
 ### Configuration Options
 
-- **method**: `'auto'` (default), `'pu-net'`, or `'interpolation'`
+- **method**: `'auto'` (default), `'mls'`, or `'interpolation'`
 - **density**: Number of points per unit distance (default: 10)
 - **debug**: Enable performance monitoring and detailed logging (default: false)
 
@@ -99,7 +99,7 @@ Enable console logging to see detailed information:
 
 ```typescript
 const result = await densify(projectedActivities, {
-  method: "pu-net",
+  method: "mls",
   density: 8,
   debug: true, // Add this for detailed logging
 });
@@ -113,7 +113,7 @@ const result = await densify(projectedActivities, {
 
 - `projectedActivities`: Array of projected activity data
 - `options`: Configuration object
-  - `method`: `'pu-net' | 'interpolation'`
+  - `method`: `'mls' | 'interpolation'`
   - `density`: `number` (points per unit)
 
 **Returns:**
