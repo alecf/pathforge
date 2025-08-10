@@ -1,32 +1,15 @@
 import KDBush from "kdbush";
 import type { ProjectedActivity } from "~/app/_components/StravaActivityMapUtils";
 
-type KDBushIndex = {
-  add: (i: number) => void;
-  finish: () => void;
-  range: (minX: number, minY: number, maxX: number, maxY: number) => number[];
-};
+function createIndex(points: { x: number; y: number; z: number }[]) {
+  // KDBush v4 API: construct with number of items, then add(x, y), then finish()
+  const index = new KDBush(points.length, 16, Float32Array);
+  for (const p of points) index.add(p.x, p.y);
+  index.finish();
+  return index;
+}
 
-type Bounds = {
-  minX: number;
-  maxX: number;
-  minY: number;
-  maxY: number;
-  minZ: number;
-  maxZ: number;
-};
-
-// Keeping types if needed later, but not used in non-ML path
-type Point3 = [number, number, number];
-
-type NormalizationParams = {
-  scaleX: number;
-  scaleY: number;
-  scaleZ: number;
-  offsetX: number;
-  offsetY: number;
-  offsetZ: number;
-};
+// Removed unused legacy types from ML path
 
 // Removed ML session code
 
@@ -48,6 +31,25 @@ export interface DensificationResult {
     minZ: number;
     maxZ: number;
   };
+}
+
+/**
+ * Compute a grid step that respects both the requested density and a global
+ * cap on the number of samples. This prevents main-thread stalls for large
+ * extents by adapting resolution to area.
+ */
+function computeAdaptiveStep(
+  requestedDensity: number,
+  width: number,
+  height: number,
+  maxSamples = 200_000,
+): number {
+  // Density is treated as points per unit distance; base step from density
+  const densityStep = 1 / Math.max(1, requestedDensity);
+  const area = Math.max(1, width * height);
+  const stepFromCap = Math.sqrt(area / Math.max(1, maxSamples));
+  // Use the larger (coarser) step to keep samples under the cap
+  return Math.max(densityStep, stepFromCap);
 }
 
 /**
@@ -86,36 +88,57 @@ function interpolateDensePoints(
   minY -= padding;
   maxY += padding;
 
-  // Create a grid of points
-  const stepSize = 1 / density;
+  // Build a spatial index of input points for fast nearest lookups
+  const samples: { x: number; y: number; z: number }[] = [];
+  projectedActivities.forEach((activity) => {
+    activity.points.forEach((p) => {
+      if (p.altitude === undefined) return;
+      samples.push({ x: p.x, y: p.y, z: p.altitude });
+    });
+  });
+
+  // If no altitude data, return empty
+  if (samples.length === 0) {
+    return { densePoints: [], bounds: { minX, maxX, minY, maxY, minZ, maxZ } };
+  }
+
+  // KDBush v4: construct with points array and accessors; no add/finish
+  const index = createIndex(samples);
+
+  // Create a grid of points using an adaptive step to cap sample count
+  const width = maxX - minX;
+  const height = maxY - minY;
+  const stepSize = computeAdaptiveStep(density, width, height);
+  const searchRadius = Math.max(5, stepSize * 5);
+  const maxRadius2 = searchRadius * searchRadius;
   const densePoints: DensePoint[] = [];
 
   for (let x = minX; x <= maxX; x += stepSize) {
     for (let y = minY; y <= maxY; y += stepSize) {
-      // Find the closest activity point to interpolate altitude
-      let closestDistance = Infinity;
-      let closestAltitude = 0;
+      const ids = index.range(
+        x - searchRadius,
+        y - searchRadius,
+        x + searchRadius,
+        y + searchRadius,
+      );
+      if (ids.length === 0) continue;
 
-      projectedActivities.forEach((activity) => {
-        activity.points.forEach((point) => {
-          const distance = Math.sqrt((x - point.x) ** 2 + (y - point.y) ** 2);
-          if (distance < closestDistance && point.altitude !== undefined) {
-            closestDistance = distance;
-            closestAltitude = point.altitude;
-          }
-        });
-      });
+      // Find nearest within radius
+      let bestD2 = Infinity;
+      let bestZ = 0;
+      for (const id of ids) {
+        const s = samples[id]!;
+        const dx = s.x - x;
+        const dy = s.y - y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestD2 && d2 <= maxRadius2) {
+          bestD2 = d2;
+          bestZ = s.z;
+        }
+      }
 
-      // Only add points that are reasonably close to activity paths
-      if (closestDistance < 100) {
-        // Within 100 units of an activity
-        densePoints.push({
-          x,
-          y,
-          z: closestAltitude,
-          lat: 0, // We'll need to convert back from projected coordinates
-          lng: 0,
-        });
+      if (bestD2 !== Infinity) {
+        densePoints.push({ x, y, z: bestZ, lat: 0, lng: 0 });
       }
     }
   }
@@ -161,27 +184,14 @@ function mlsDensification(
   }
 
   // Build spatial index
-  type KDBushCtor = new (
-    length: number,
-    getX: (i: number) => number,
-    getY: (i: number) => number,
-    nodeSize?: number,
-    ArrayType?: Float32ArrayConstructor,
-  ) => KDBushIndex;
-  const KDBushClass = KDBush as unknown as KDBushCtor;
-  const index: KDBushIndex = new KDBushClass(
-    samples.length,
-    (i: number) => samples[i]!.x,
-    (i: number) => samples[i]!.y,
-    16,
-    Float32Array,
-  );
-  for (let i = 0; i < samples.length; i++) index.add(i);
-  index.finish();
+  // KDBush v4: construct with points array and accessors; no add/finish
+  const index = createIndex(samples);
 
-  // Grid step derived from density
-  const step = 1 / Math.max(1, density);
-  const searchRadius = step * 5; // neighborhood radius
+  // Grid step derived from density but adapted to cap total samples
+  const width = maxX - minX;
+  const height = maxY - minY;
+  const step = computeAdaptiveStep(density, width, height);
+  const searchRadius = Math.max(5, step * 5); // neighborhood radius
   const twoSigma2 = (searchRadius * 0.6) ** 2 * 2; // Gaussian kernel variance
 
   const densePoints: DensePoint[] = [];

@@ -286,7 +286,14 @@ export function StravaActivity3DMap({
         density: 8, // Adjust density as needed
         debug: true, // Enable debug logging
       });
-      setDensePoints(result.densePoints);
+      // Normalize dense terrain altitude to the same 0-100 range as activity lines
+      const { minAltitude, maxAltitude, hasAltitudeData } = altitudeBounds;
+      const altitudeRange = Math.max(1e-6, maxAltitude - minAltitude);
+      const normalizedDense = result.densePoints.map((p) => ({
+        ...p,
+        z: hasAltitudeData ? ((p.z - minAltitude) / altitudeRange) * 100 : 0,
+      }));
+      setDensePoints(normalizedDense);
       setShowDenseTerrain(true);
       console.log(
         `✅ Terrain generation complete: ${result.densePoints.length} points`,
