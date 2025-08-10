@@ -13,7 +13,7 @@ import {
   deriveGridSpacings,
   useMapProjection,
 } from "~/util/mapUtils";
-import { DenseTerrainMesh } from "./DenseTerrainMesh";
+import { DenseTerrainMesh, DenseTerrainSurface } from "./DenseTerrainMesh";
 import {
   type ActivityWithStreams,
   type ProjectedActivity,
@@ -227,6 +227,14 @@ export function StravaActivity3DMap({
   const [densePoints, setDensePoints] = useState<DensePoint[]>([]);
   const [isDensifying, setIsDensifying] = useState(false);
   const [showDenseTerrain, setShowDenseTerrain] = useState(false);
+  const [renderMode, setRenderMode] = useState<"mesh" | "surface">("mesh");
+  const [selectedMethod, setSelectedMethod] = useState<"mls" | "interpolation">(
+    "mls",
+  );
+  const [cacheByMethod, setCacheByMethod] = useState<{
+    mls?: DensePoint[];
+    interpolation?: DensePoint[];
+  }>({});
   const { projectedActivities, projection } = useMapProjection({
     activities,
     width,
@@ -275,18 +283,16 @@ export function StravaActivity3DMap({
   const maxSize = Math.max(sizeX, sizeZ);
   const cameraDistance = Math.max(maxSize * 3, 300); // Position camera further out, with minimum distance
 
-  const handleDensify = async () => {
+  const runDensification = async (method: "mls" | "interpolation") => {
     if (projectedActivities.length === 0) return;
-
     setIsDensifying(true);
     try {
-      console.log("🚀 Starting terrain densification...");
+      console.log(`🚀 Starting terrain densification using ${method}...`);
       const result = await densify(projectedActivities, {
-        method: "auto", // Auto-select best available method
-        density: 8, // Adjust density as needed
-        debug: true, // Enable debug logging
+        method,
+        density: 8,
+        debug: true,
       });
-      // Normalize dense terrain altitude to the same 0-100 range as activity lines
       const { minAltitude, maxAltitude, hasAltitudeData } = altitudeBounds;
       const altitudeRange = Math.max(1e-6, maxAltitude - minAltitude);
       const normalizedDense = result.densePoints.map((p) => ({
@@ -294,14 +300,31 @@ export function StravaActivity3DMap({
         z: hasAltitudeData ? ((p.z - minAltitude) / altitudeRange) * 100 : 0,
       }));
       setDensePoints(normalizedDense);
+      setCacheByMethod((prev) => ({ ...prev, [method]: normalizedDense }));
       setShowDenseTerrain(true);
       console.log(
-        `✅ Terrain generation complete: ${result.densePoints.length} points`,
+        `✅ Terrain generation complete: ${result.densePoints.length} points (${method})`,
       );
     } catch (error) {
       console.error("❌ Densification failed:", error);
     } finally {
       setIsDensifying(false);
+    }
+  };
+
+  const handleDensify = async () => {
+    await runDensification(selectedMethod);
+  };
+
+  const handleSelectMethod = async (method: "mls" | "interpolation") => {
+    setSelectedMethod(method);
+    if (showDenseTerrain) {
+      const cached = cacheByMethod[method];
+      if (cached && cached.length > 0) {
+        setDensePoints(cached);
+      } else {
+        await runDensification(method);
+      }
     }
   };
 
@@ -316,7 +339,43 @@ export function StravaActivity3DMap({
       </div>
 
       {/* Control buttons */}
-      <div className="absolute top-4 right-4 z-10 flex gap-2">
+      <div className="absolute top-4 right-4 z-10 flex flex-col items-end gap-2">
+        {/* Render mode toggle */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setRenderMode("mesh")}
+            disabled={isDensifying}
+            className={`rounded px-3 py-1 text-xs text-white ${renderMode === "mesh" ? "bg-emerald-600" : "bg-gray-700 hover:bg-gray-600"} disabled:opacity-50`}
+          >
+            Mesh
+          </button>
+          <button
+            onClick={() => setRenderMode("surface")}
+            disabled={isDensifying}
+            className={`rounded px-3 py-1 text-xs text-white ${renderMode === "surface" ? "bg-emerald-600" : "bg-gray-700 hover:bg-gray-600"} disabled:opacity-50`}
+          >
+            Surface
+          </button>
+        </div>
+
+        {/* Densification method toggle */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => void handleSelectMethod("mls")}
+            disabled={isDensifying}
+            className={`rounded px-3 py-1 text-xs text-white ${selectedMethod === "mls" ? "bg-purple-600" : "bg-gray-700 hover:bg-gray-600"} disabled:opacity-50`}
+          >
+            MLS
+          </button>
+          <button
+            onClick={() => void handleSelectMethod("interpolation")}
+            disabled={isDensifying}
+            className={`rounded px-3 py-1 text-xs text-white ${selectedMethod === "interpolation" ? "bg-purple-600" : "bg-gray-700 hover:bg-gray-600"} disabled:opacity-50`}
+          >
+            Interpolation
+          </button>
+        </div>
+
         <button
           onClick={handleDensify}
           disabled={isDensifying}
@@ -377,27 +436,29 @@ export function StravaActivity3DMap({
         {/* Dense terrain */}
         {showDenseTerrain && densePoints.length > 0 && (
           <>
-            <DenseTerrainMesh
-              densePoints={densePoints}
-              pointSize={3}
-              color="#4ade80"
-              opacity={0.4}
-            />
-            {/* Alternative surface rendering - uncomment to use */}
-            {/* <DenseTerrainSurface
-              densePoints={densePoints}
-              bounds={{
-                minX: bounds.minX,
-                maxX: bounds.maxX,
-                minY: bounds.minY,
-                maxY: bounds.maxY,
-                minZ: altitudeBounds.minAltitude,
-                maxZ: altitudeBounds.maxAltitude,
-              }}
-              resolution={30}
-              color="#22c55e"
-              opacity={0.2}
-            /> */}
+            {renderMode === "mesh" ? (
+              <DenseTerrainMesh
+                densePoints={densePoints}
+                pointSize={3}
+                color="#4ade80"
+                opacity={0.4}
+              />
+            ) : (
+              <DenseTerrainSurface
+                densePoints={densePoints}
+                bounds={{
+                  minX: bounds.minX,
+                  maxX: bounds.maxX,
+                  minY: bounds.minY,
+                  maxY: bounds.maxY,
+                  minZ: 0,
+                  maxZ: 100,
+                }}
+                resolution={30}
+                color="#22c55e"
+                opacity={0.5}
+              />
+            )}
           </>
         )}
 
