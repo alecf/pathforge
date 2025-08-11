@@ -10,6 +10,96 @@ import {
 } from "three";
 import type { DensePoint } from "~/util/densifyUtils";
 
+// Estimate a reasonable maximum edge length for triangulation from point distribution
+function estimateMaxEdgeLengthFromPoints(densePoints: DensePoint[]): number {
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity;
+  for (const point of densePoints) {
+    if (point.x < minX) minX = point.x;
+    if (point.x > maxX) maxX = point.x;
+    if (point.y < minY) minY = point.y;
+    if (point.y > maxY) maxY = point.y;
+  }
+  const area = Math.max(1, (maxX - minX) * (maxY - minY));
+  const meanStep = Math.sqrt(area / Math.max(1, densePoints.length));
+  return meanStep * 6; // drop very long skinny triangles
+}
+
+// Build [x,y] coordinate array for Delaunay using a flatMap transformation
+function buildDelaunayCoords(points: DensePoint[]): Float64Array {
+  return new Float64Array(points.flatMap((p) => [p.x, p.y]));
+}
+
+// Append a thin rim of boundary triangles so the surface reaches the map edges
+function addBoundaryRim(
+  geom: BufferGeometry,
+  positions: Float32Array,
+  densePoints: DensePoint[],
+  mapBounds: { minX: number; maxX: number; minY: number; maxY: number },
+  maxEdge: number,
+  triangleIndices: number[],
+) {
+  const { minX, maxX, minY, maxY } = mapBounds;
+  const rimStep = maxEdge / 2;
+  const rimPoints: DensePoint[] = [];
+  for (let x = minX; x <= maxX; x += rimStep) {
+    rimPoints.push({ x, y: minY, z: 0, lat: 0, lng: 0 });
+    rimPoints.push({ x, y: maxY, z: 0, lat: 0, lng: 0 });
+  }
+  for (let y = minY; y <= maxY; y += rimStep) {
+    rimPoints.push({ x: minX, y, z: 0, lat: 0, lng: 0 });
+    rimPoints.push({ x: maxX, y, z: 0, lat: 0, lng: 0 });
+  }
+  const baseIndex = densePoints.length;
+  if (rimPoints.length) {
+    // Append rim positions, flattened at z=0 so it smoothly fades
+    const newPositions = new Float32Array(
+      (densePoints.length + rimPoints.length) * 3,
+    );
+    newPositions.set(positions);
+    for (let i = 0; i < rimPoints.length; i++) {
+      const p = rimPoints[i]!;
+      const j = (baseIndex + i) * 3;
+      newPositions[j] = p.x;
+      newPositions[j + 1] = p.z; // 0
+      newPositions[j + 2] = p.y;
+    }
+    geom.setAttribute("position", new Float32BufferAttribute(newPositions, 3));
+
+    // Create simple quads along edges by connecting to nearest existing vertices using coarse gridding
+    for (let y = minY; y < maxY; y += rimStep) {
+      const i0 =
+        baseIndex +
+        Math.floor(
+          ((y - minY) / rimStep) * 2 +
+            (2 * Math.floor((maxX - minX) / rimStep) + 2) * 1,
+        );
+      const i1 = i0 + 2;
+      // Find nearest interior points at same y via linear scan (small set)
+      let nearestL = -1;
+      let nearestR = -1;
+      let bestLd = Infinity,
+        bestRd = Infinity;
+      for (let vi = 0; vi < densePoints.length; vi++) {
+        const p = densePoints[vi]!;
+        if (Math.abs(p.y - y) > rimStep) continue;
+        if (p.x < minX + rimStep && minX - p.x < bestLd) {
+          bestLd = minX - p.x;
+          nearestL = vi;
+        }
+        if (p.x > maxX - rimStep && p.x - maxX < bestRd) {
+          bestRd = p.x - maxX;
+          nearestR = vi;
+        }
+      }
+      if (nearestL >= 0) triangleIndices.push(nearestL, i0, i0 + 2);
+      if (nearestR >= 0) triangleIndices.push(nearestR, i1, i1 + 2);
+    }
+  }
+}
+
 interface DenseTerrainMeshProps {
   densePoints: DensePoint[];
   pointSize?: number;
@@ -26,15 +116,10 @@ export function DenseTerrainMesh({
   const pointsGeometry = useMemo(() => {
     const geometry = new BufferGeometry();
 
-    // Create position array for all points
-    const positions = new Float32Array(densePoints.length * 3);
-
-    densePoints.forEach((point, index) => {
-      const i = index * 3;
-      positions[i] = point.x; // X coordinate
-      positions[i + 1] = point.z; // Y coordinate (altitude)
-      positions[i + 2] = point.y; // Z coordinate (depth)
-    });
+    // Create position array for all points via flatMap -> typed array
+    const positions = Float32Array.from(
+      densePoints.flatMap((point) => [point.x, point.z, point.y]),
+    );
 
     geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
 
@@ -209,6 +294,7 @@ export function DenseTerrainSurface({
       );
       // Combine subtle shading with trail color by lerping towards existing trail-mixed color
       const shaded = new Color().setHSL(baseHSL.h, saturation, lightness);
+      // component offset into flat RGB array (r,g,b per vertex)
       const idx3 = i * 3;
       const hasTrail = colors.length === altitudes.length * 3;
       if (hasTrail) {
@@ -292,47 +378,22 @@ export function AdaptiveTerrainSurface({
     }
 
     // Positions: use densePoints order for vertex buffer
-    const positions = new Float32Array(densePoints.length * 3);
-    for (let i = 0; i < densePoints.length; i++) {
-      const p = densePoints[i]!;
-      const j = i * 3;
-      positions[j] = p.x;
-      positions[j + 1] = p.z;
-      positions[j + 2] = p.y;
-    }
+    const positions = Float32Array.from(
+      densePoints.flatMap((p) => [p.x, p.z, p.y]),
+    );
     geom.setAttribute("position", new Float32BufferAttribute(positions, 3));
 
     // Delaunay triangulation over XY
-    const coords = new Float64Array(densePoints.length * 2);
-    for (let i = 0; i < densePoints.length; i++) {
-      const p = densePoints[i]!;
-      coords[2 * i] = p.x;
-      coords[2 * i + 1] = p.y;
-    }
+    const coords = buildDelaunayCoords(densePoints);
     const DelaunatorCtor = Delaunator as unknown as new (
       coords: ArrayLike<number>,
     ) => { triangles: Uint32Array };
     const delaunay = new DelaunatorCtor(coords as ArrayLike<number>);
-    const triIdx: number[] = [];
+    // Triangle index buffer (triplets of vertex indices)
+    const triangleIndices: number[] = [];
 
     const maxEdge =
-      maxEdgeLength ??
-      (() => {
-        // estimate from nearest-neighbor spacing
-        let minX = Infinity,
-          maxX = -Infinity,
-          minY = Infinity,
-          maxY = -Infinity;
-        for (const p of densePoints) {
-          if (p.x < minX) minX = p.x;
-          if (p.x > maxX) maxX = p.x;
-          if (p.y < minY) minY = p.y;
-          if (p.y > maxY) maxY = p.y;
-        }
-        const area = Math.max(1, (maxX - minX) * (maxY - minY));
-        const meanStep = Math.sqrt(area / Math.max(1, densePoints.length));
-        return meanStep * 6; // drop very long skinny triangles
-      })();
+      maxEdgeLength ?? estimateMaxEdgeLengthFromPoints(densePoints);
 
     const tris: Uint32Array = delaunay.triangles;
     for (let t = 0; t < tris.length; t += 3) {
@@ -346,73 +407,20 @@ export function AdaptiveTerrainSurface({
       const bc = Math.hypot(pc.x - pb.x, pc.y - pb.y);
       const ca = Math.hypot(pa.x - pc.x, pa.y - pc.y);
       if (ab > maxEdge || bc > maxEdge || ca > maxEdge) continue;
-      triIdx.push(a, b, c);
+      triangleIndices.push(a, b, c);
     }
     // If bounds are provided, add a thin rim of boundary triangles so the surface reaches the map edges
     if (mapBounds) {
-      const { minX, maxX, minY, maxY } = mapBounds;
-      const rimStep = maxEdge / 2;
-      const rimPoints: DensePoint[] = [];
-      for (let x = minX; x <= maxX; x += rimStep) {
-        rimPoints.push({ x, y: minY, z: 0, lat: 0, lng: 0 });
-        rimPoints.push({ x, y: maxY, z: 0, lat: 0, lng: 0 });
-      }
-      for (let y = minY; y <= maxY; y += rimStep) {
-        rimPoints.push({ x: minX, y, z: 0, lat: 0, lng: 0 });
-        rimPoints.push({ x: maxX, y, z: 0, lat: 0, lng: 0 });
-      }
-      const baseIndex = densePoints.length;
-      if (rimPoints.length) {
-        // Append rim positions, flattened at z=0 so it smoothly fades
-        const newPositions = new Float32Array(
-          (densePoints.length + rimPoints.length) * 3,
-        );
-        newPositions.set(positions);
-        for (let i = 0; i < rimPoints.length; i++) {
-          const p = rimPoints[i]!;
-          const j = (baseIndex + i) * 3;
-          newPositions[j] = p.x;
-          newPositions[j + 1] = p.z; // 0
-          newPositions[j + 2] = p.y;
-        }
-        geom.setAttribute(
-          "position",
-          new Float32BufferAttribute(newPositions, 3),
-        );
-        // Create simple quads along edges by connecting to nearest existing vertices using coarse gridding
-        // For simplicity, skip re-triangulating via Delaunay and add skinny triangles to edges
-        // Left/right edges
-        for (let y = minY; y < maxY; y += rimStep) {
-          const i0 =
-            baseIndex +
-            Math.floor(
-              ((y - minY) / rimStep) * 2 +
-                (2 * Math.floor((maxX - minX) / rimStep) + 2) * 1,
-            );
-          const i1 = i0 + 2;
-          // Find nearest interior points at same y via linear scan (small set)
-          let nearestL = -1;
-          let nearestR = -1;
-          let bestLd = Infinity,
-            bestRd = Infinity;
-          for (let vi = 0; vi < densePoints.length; vi++) {
-            const p = densePoints[vi]!;
-            if (Math.abs(p.y - y) > rimStep) continue;
-            if (p.x < minX + rimStep && minX - p.x < bestLd) {
-              bestLd = minX - p.x;
-              nearestL = vi;
-            }
-            if (p.x > maxX - rimStep && p.x - maxX < bestRd) {
-              bestRd = p.x - maxX;
-              nearestR = vi;
-            }
-          }
-          if (nearestL >= 0) triIdx.push(nearestL, i0, i0 + 2);
-          if (nearestR >= 0) triIdx.push(nearestR, i1, i1 + 2);
-        }
-      }
+      addBoundaryRim(
+        geom,
+        positions,
+        densePoints,
+        mapBounds,
+        maxEdge,
+        triangleIndices,
+      );
     }
-    geom.setIndex(triIdx);
+    geom.setIndex(triangleIndices);
     geom.computeVertexNormals();
 
     // Build per-vertex colors: altitude/slope shading + trail proximity
@@ -494,6 +502,7 @@ export function AdaptiveTerrainSurface({
         Math.min(1, baseHSL.s * 0.95 + slope * 0.12),
       );
       const shaded = new Color().setHSL(baseHSL.h, saturation, lightness);
+      // component offset into flat RGB array (r,g,b per vertex)
       const idx3 = i * 3;
       if (trailColors) {
         const r = trailColors[idx3] ?? 0;
@@ -515,7 +524,7 @@ export function AdaptiveTerrainSurface({
     const end =
       typeof performance !== "undefined" ? performance.now() : Date.now();
     console.log(
-      `✅ Adaptive surface regenerated: vertices=${densePoints.length}, triangles=${triIdx.length / 3}, took ${(
+      `✅ Adaptive surface regenerated: vertices=${densePoints.length}, triangles=${triangleIndices.length / 3}, took ${(
         end - start
       ).toFixed(1)}ms`,
     );
