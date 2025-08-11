@@ -358,10 +358,6 @@ export function useDetailedActivitiesWithStreams(activityIds: string[]) {
     () =>
       activities.map((activity, index) => {
         const streams = streamsData[index];
-        if (index === 0) {
-          console.log("streams", streams);
-          console.log("streams structure:", JSON.stringify(streams, null, 2));
-        }
         if (!streams) return activity;
 
         // Handle the actual streams response structure - it's an array of StravaActivityStream objects

@@ -93,6 +93,7 @@ export const stravaRouter = createTRPCRouter({
           id: z.string(),
           keys: z.array(z.string()).optional(),
           key_by_type: z.boolean().optional(),
+          resolution: z.enum(["low", "medium", "high"]).optional(),
         }),
       )
       .query(async ({ input, ctx }) => {
@@ -120,6 +121,7 @@ export const stravaRouter = createTRPCRouter({
             id: input.id,
             types: input.keys,
             keys: input.keys?.join(","),
+            resolution: input.resolution ?? "medium",
             key_by_type: input.key_by_type,
           });
 

@@ -185,8 +185,7 @@ function DynamicClipping({
       controlsRef.current.minDistance = Math.max(1, modelRadius * 0.02);
       controlsRef.current.maxDistance = Math.max(modelRadius * 20, 2000);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [camera, modelRadius]);
+  }, [camera, controlsRef, modelRadius]);
 
   useFrame(() => {
     const target =
@@ -231,10 +230,10 @@ export function StravaActivity3DMap({
   const [selectedMethod, setSelectedMethod] = useState<"mls" | "interpolation">(
     "mls",
   );
-  const [cacheByMethod, setCacheByMethod] = useState<{
-    mls?: DensePoint[];
-    interpolation?: DensePoint[];
-  }>({});
+  // Cache terrain per selection of activities and method
+  const [cacheBySelection, setCacheBySelection] = useState<
+    Record<string, { mls?: DensePoint[]; interpolation?: DensePoint[] }>
+  >({});
   const { projectedActivities, projection } = useMapProjection({
     activities,
     width,
@@ -283,6 +282,15 @@ export function StravaActivity3DMap({
   const maxSize = Math.max(sizeX, sizeZ);
   const cameraDistance = Math.max(maxSize * 3, 300); // Position camera further out, with minimum distance
 
+  // Key representing the current set of selected activities
+  const selectionKey = useMemo(() => {
+    return activities
+      .map((a) => a.id?.toString?.() ?? "")
+      .filter(Boolean)
+      .sort()
+      .join("|");
+  }, [activities]);
+
   const runDensification = async (method: "mls" | "interpolation") => {
     if (projectedActivities.length === 0) return;
     setIsDensifying(true);
@@ -300,7 +308,13 @@ export function StravaActivity3DMap({
         z: hasAltitudeData ? ((p.z - minAltitude) / altitudeRange) * 100 : 0,
       }));
       setDensePoints(normalizedDense);
-      setCacheByMethod((prev) => ({ ...prev, [method]: normalizedDense }));
+      setCacheBySelection((prev) => ({
+        ...prev,
+        [selectionKey]: {
+          ...(prev[selectionKey] ?? {}),
+          [method]: normalizedDense,
+        },
+      }));
       setShowDenseTerrain(true);
       console.log(
         `✅ Terrain generation complete: ${result.densePoints.length} points (${method})`,
@@ -312,14 +326,15 @@ export function StravaActivity3DMap({
     }
   };
 
-  const handleDensify = async () => {
-    await runDensification(selectedMethod);
-  };
+  // deprecated manual trigger (replaced by Show terrain checkbox)
+  // const handleDensify = async () => {
+  //   await runDensification(selectedMethod);
+  // };
 
   const handleSelectMethod = async (method: "mls" | "interpolation") => {
     setSelectedMethod(method);
     if (showDenseTerrain) {
-      const cached = cacheByMethod[method];
+      const cached = cacheBySelection[selectionKey]?.[method];
       if (cached && cached.length > 0) {
         setDensePoints(cached);
       } else {
@@ -327,6 +342,19 @@ export function StravaActivity3DMap({
       }
     }
   };
+
+  // If selected activities change while terrain is shown, regenerate lazily
+  useEffect(() => {
+    if (!showDenseTerrain) return;
+    const cached = cacheBySelection[selectionKey]?.[selectedMethod];
+    if (cached && cached.length > 0) {
+      setDensePoints(cached);
+      return;
+    }
+    // No cache for this selection+method, generate lazily
+    void runDensification(selectedMethod);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectionKey]);
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-lg bg-gray-900">
@@ -376,22 +404,26 @@ export function StravaActivity3DMap({
           </button>
         </div>
 
-        <button
-          onClick={handleDensify}
-          disabled={isDensifying}
-          className="rounded bg-green-600 px-3 py-1 text-xs text-white hover:bg-green-700 disabled:opacity-50"
-        >
-          {isDensifying ? "Densifying..." : "Generate Terrain"}
-        </button>
-
-        {showDenseTerrain && (
-          <button
-            onClick={() => setShowDenseTerrain(!showDenseTerrain)}
-            className="rounded bg-blue-600 px-3 py-1 text-xs text-white hover:bg-blue-700"
-          >
-            {showDenseTerrain ? "Hide Terrain" : "Show Terrain"}
-          </button>
-        )}
+        {/* Show/Hide Terrain checkbox with lazy generation */}
+        <label className="flex items-center gap-2 text-xs text-white">
+          <input
+            type="checkbox"
+            checked={showDenseTerrain}
+            onChange={async (e) => {
+              const checked = e.target.checked;
+              setShowDenseTerrain(checked);
+              if (checked) {
+                const cached = cacheBySelection[selectionKey]?.[selectedMethod];
+                if (cached && cached.length > 0) {
+                  setDensePoints(cached);
+                } else {
+                  await runDensification(selectedMethod);
+                }
+              }
+            }}
+          />
+          {isDensifying ? "Generating terrain…" : "Show terrain"}
+        </label>
 
         <button
           onClick={() => {

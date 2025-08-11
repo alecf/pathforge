@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
 import { StravaActivityList } from "../_components/StravaActivityList";
 import { StravaActivityMapTabs } from "../_components/StravaActivityMapTabs";
@@ -20,12 +20,15 @@ export default function RecentMapPage() {
     (DetailedActivityResponse | ActivityWithStreams)[]
   >([]);
 
-  // Update filtered activities when activities change
+  // Initialize filtered activities once when activities first load to avoid
+  // overwriting user's selections when data updates (e.g., streams resolve)
+  const initializedRef = useRef(false);
   useEffect(() => {
-    if (activities && activities.length > 0) {
+    if (!initializedRef.current && activities && activities.length > 0) {
       setFilteredActivities(activities);
+      initializedRef.current = true;
     }
-  }, [activities]); // Only depend on the length to avoid re-renders
+  }, [activities]);
 
   if (isLoading) {
     return (
