@@ -227,12 +227,17 @@ export function StravaActivity3DMap({
   const [isDensifying, setIsDensifying] = useState(false);
   const [showDenseTerrain, setShowDenseTerrain] = useState(false);
   const [renderMode, setRenderMode] = useState<"mesh" | "surface">("mesh");
-  const [selectedMethod, setSelectedMethod] = useState<"mls" | "interpolation">(
+  const [selectedMethod, setSelectedMethod] = useState<
+    "mls" | "interpolation" | "delaunay"
+  >(
     "mls",
   );
   // Cache terrain per selection of activities and method
   const [cacheBySelection, setCacheBySelection] = useState<
-    Record<string, { mls?: DensePoint[]; interpolation?: DensePoint[] }>
+    Record<
+      string,
+      { mls?: DensePoint[]; interpolation?: DensePoint[]; delaunay?: DensePoint[] }
+    >
   >({});
   const { projectedActivities, projection } = useMapProjection({
     activities,
@@ -291,7 +296,9 @@ export function StravaActivity3DMap({
       .join("|");
   }, [activities]);
 
-  const runDensification = async (method: "mls" | "interpolation") => {
+  const runDensification = async (
+    method: "mls" | "interpolation" | "delaunay",
+  ) => {
     if (projectedActivities.length === 0) return;
     setIsDensifying(true);
     try {
@@ -331,7 +338,9 @@ export function StravaActivity3DMap({
   //   await runDensification(selectedMethod);
   // };
 
-  const handleSelectMethod = async (method: "mls" | "interpolation") => {
+  const handleSelectMethod = async (
+    method: "mls" | "interpolation" | "delaunay",
+  ) => {
     setSelectedMethod(method);
     if (showDenseTerrain) {
       const cached = cacheBySelection[selectionKey]?.[method];
@@ -401,6 +410,13 @@ export function StravaActivity3DMap({
             className={`rounded px-3 py-1 text-xs text-white ${selectedMethod === "interpolation" ? "bg-purple-600" : "bg-gray-700 hover:bg-gray-600"} disabled:opacity-50`}
           >
             Interpolation
+          </button>
+          <button
+            onClick={() => void handleSelectMethod("delaunay")}
+            disabled={isDensifying}
+            className={`rounded px-3 py-1 text-xs text-white ${selectedMethod === "delaunay" ? "bg-purple-600" : "bg-gray-700 hover:bg-gray-600"} disabled:opacity-50`}
+          >
+            Delaunay
           </button>
         </div>
 

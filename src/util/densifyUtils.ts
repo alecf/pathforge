@@ -1,3 +1,4 @@
+import Delaunator from "delaunator";
 import KDBush from "kdbush";
 import type { ProjectedActivity } from "~/app/_components/StravaActivityMapUtils";
 
@@ -229,26 +230,173 @@ function mlsDensification(
   return { densePoints, bounds: { minX, maxX, minY, maxY, minZ, maxZ } };
 }
 
+/**
+ * Delaunay-based densification using Mapbox's delaunator.
+ *
+ * Strategy:
+ *  - Build Delaunay triangulation over input samples
+ *  - Iterate each triangle's bounding box on a quantized grid derived from density
+ *  - For each quantized point inside the triangle, compute z via barycentric interpolation
+ *  - Use a grid-keyed map to avoid duplicate samples across neighboring triangles
+ */
+function delaunayDensification(
+  projectedActivities: ProjectedActivity[],
+  density = 10,
+): DensificationResult {
+  // Collect samples
+  const pts: { x: number; y: number; z: number }[] = [];
+  let minX = Infinity,
+    maxX = -Infinity,
+    minY = Infinity,
+    maxY = -Infinity,
+    minZ = Infinity,
+    maxZ = -Infinity;
+
+  for (const a of projectedActivities) {
+    for (const p of a.points) {
+      if (p.altitude === undefined) continue;
+      pts.push({ x: p.x, y: p.y, z: p.altitude });
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+      if (p.altitude < minZ) minZ = p.altitude;
+      if (p.altitude > maxZ) maxZ = p.altitude;
+    }
+  }
+
+  if (pts.length < 3) {
+    return { densePoints: [], bounds: { minX, maxX, minY, maxY, minZ, maxZ } };
+  }
+
+  // Compute adaptive step and quantization helpers
+  const width = maxX - minX;
+  const height = maxY - minY;
+  const step = computeAdaptiveStep(density, width, height);
+  const invStep = 1 / Math.max(1e-9, step);
+
+  // Prepare coordinates for Delaunator
+  const coords = new Float64Array(pts.length * 2);
+  for (let i = 0; i < pts.length; i++) {
+    coords[2 * i] = pts[i]!.x;
+    coords[2 * i + 1] = pts[i]!.y;
+  }
+
+  const delaunay = new (Delaunator as unknown as new (
+    coords: ArrayLike<number>,
+  ) => { triangles: Uint32Array })(coords as ArrayLike<number>);
+  const triangles = delaunay.triangles; // indices into pts
+
+  // Barycentric helper
+  function interpolateZ(
+    px: number,
+    py: number,
+    a: { x: number; y: number; z: number },
+    b: { x: number; y: number; z: number },
+    c: { x: number; y: number; z: number },
+  ): number | null {
+    const v0x = b.x - a.x;
+    const v0y = b.y - a.y;
+    const v1x = c.x - a.x;
+    const v1y = c.y - a.y;
+    const v2x = px - a.x;
+    const v2y = py - a.y;
+
+    const den = v0x * v1y - v1x * v0y;
+    if (Math.abs(den) < 1e-12) return null;
+    const invDen = 1 / den;
+    const u = (v2x * v1y - v1x * v2y) * invDen;
+    const v = (v0x * v2y - v2x * v0y) * invDen;
+    const w = 1 - u - v;
+    if (u < -1e-6 || v < -1e-6 || w < -1e-6) return null; // outside triangle
+    return u * b.z + v * c.z + w * a.z;
+  }
+
+  // Use a map to dedupe quantized samples
+  const seen = new Set<string>();
+  const densePoints: DensePoint[] = [];
+
+  // Iterate all triangles
+  for (let t = 0; t < triangles.length; t += 3) {
+    const ia = triangles[t]!;
+    const ib = triangles[t + 1]!;
+    const ic = triangles[t + 2]!;
+    const A = pts[ia]!;
+    const B = pts[ib]!;
+    const C = pts[ic]!;
+
+    // Triangle bbox
+    const tMinX = Math.min(A.x, B.x, C.x);
+    const tMaxX = Math.max(A.x, B.x, C.x);
+    const tMinY = Math.min(A.y, B.y, C.y);
+    const tMaxY = Math.max(A.y, B.y, C.y);
+
+    // Rasterize over quantized grid inside bbox
+    const i0 = Math.floor((tMinX - minX) * invStep);
+    const i1 = Math.ceil((tMaxX - minX) * invStep);
+    const j0 = Math.floor((tMinY - minY) * invStep);
+    const j1 = Math.ceil((tMaxY - minY) * invStep);
+
+    for (let i = i0; i <= i1; i++) {
+      const x = minX + i * step;
+      for (let j = j0; j <= j1; j++) {
+        const y = minY + j * step;
+        const z = interpolateZ(x, y, A, B, C);
+        if (z == null) continue;
+        const key = `${i},${j}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        densePoints.push({ x, y, z, lat: 0, lng: 0 });
+      }
+    }
+  }
+
+  return { densePoints, bounds: { minX, maxX, minY, maxY, minZ, maxZ } };
+}
+
 // Removed PU-Net functions and checks
 
 /**
  * Get available densification methods
  */
+type DensifyMethodKey = "mls" | "interpolation" | "delaunay";
+
+const densifyMethods: Record<
+  DensifyMethodKey,
+  {
+    name: string;
+    description: string;
+    run: (
+      activities: ProjectedActivity[],
+      density?: number,
+    ) => DensificationResult;
+  }
+> = {
+  mls: {
+    name: "MLS (Gaussian)",
+    description: "MLS-style smoothing on a grid with spatial index",
+    run: mlsDensification,
+  },
+  interpolation: {
+    name: "Interpolation",
+    description: "Simple grid-based interpolation using nearest neighbor",
+    run: interpolateDensePoints,
+  },
+  delaunay: {
+    name: "Delaunay",
+    description: "Delaunay triangulation with barycentric interpolation",
+    run: delaunayDensification,
+  },
+};
+
 export async function getAvailableMethods(): Promise<
-  Array<{ method: string; name: string; description: string }>
+  Array<{ method: DensifyMethodKey; name: string; description: string }>
 > {
-  return [
-    {
-      method: "mls",
-      name: "MLS (Gaussian)",
-      description: "MLS-style smoothing on a grid with spatial index",
-    },
-    {
-      method: "interpolation",
-      name: "Interpolation",
-      description: "Simple grid-based interpolation using nearest neighbor",
-    },
-  ];
+  return (Object.keys(densifyMethods) as DensifyMethodKey[]).map((key) => ({
+    method: key,
+    name: densifyMethods[key].name,
+    description: densifyMethods[key].description,
+  }));
 }
 
 /**
@@ -260,7 +408,7 @@ export async function getAvailableMethods(): Promise<
 export async function densify(
   projectedActivities: ProjectedActivity[],
   options: {
-    method?: "interpolation" | "auto" | "mls";
+    method?: DensifyMethodKey | "auto";
     density?: number;
     debug?: boolean;
   } = {},
@@ -278,7 +426,7 @@ export async function densify(
   }
 
   try {
-    let selectedMethod = method;
+    let selectedMethod: DensifyMethodKey | "auto" = method;
 
     // Auto-select method
     if (method === "auto") {
@@ -288,23 +436,15 @@ export async function densify(
       }
     }
 
-    if (selectedMethod === "mls") {
-      const result = mlsDensification(projectedActivities, density);
-      if (debug) {
-        console.log(
-          `✅ MLS completed: ${result.densePoints.length} points generated`,
-        );
-      }
-      return result;
-    } else {
-      const result = interpolateDensePoints(projectedActivities, density);
-      if (debug) {
-        console.log(
-          `✅ Interpolation completed: ${result.densePoints.length} points generated`,
-        );
-      }
-      return result;
+    const key = selectedMethod as DensifyMethodKey;
+    const impl = densifyMethods[key];
+    const result = impl.run(projectedActivities, density);
+    if (debug) {
+      console.log(
+        `✅ ${impl.name} completed: ${result.densePoints.length} points generated`,
+      );
     }
+    return result;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.warn(
@@ -312,7 +452,10 @@ export async function densify(
       errorMsg,
     );
 
-    const result = interpolateDensePoints(projectedActivities, density);
+    const result = densifyMethods.interpolation.run(
+      projectedActivities,
+      density,
+    );
     if (debug) {
       console.log(
         `✅ Fallback interpolation completed: ${result.densePoints.length} points generated`,
