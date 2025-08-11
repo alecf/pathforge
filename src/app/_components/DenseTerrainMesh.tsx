@@ -9,6 +9,10 @@ import {
   PointsMaterial,
 } from "three";
 import type { DensePoint } from "~/util/densifyUtils";
+import {
+  type SegmentGridIndex,
+  isPointNearAnySegment,
+} from "~/util/spatialIndex";
 
 // Estimate a reasonable maximum edge length for triangulation from point distribution
 function estimateMaxEdgeLengthFromPoints(densePoints: DensePoint[]): number {
@@ -32,73 +36,7 @@ function buildDelaunayCoords(points: DensePoint[]): Float64Array {
   return new Float64Array(points.flatMap((p) => [p.x, p.y]));
 }
 
-// Append a thin rim of boundary triangles so the surface reaches the map edges
-function addBoundaryRim(
-  geom: BufferGeometry,
-  positions: Float32Array,
-  densePoints: DensePoint[],
-  mapBounds: { minX: number; maxX: number; minY: number; maxY: number },
-  maxEdge: number,
-  triangleIndices: number[],
-) {
-  const { minX, maxX, minY, maxY } = mapBounds;
-  const rimStep = maxEdge / 2;
-  const rimPoints: DensePoint[] = [];
-  for (let x = minX; x <= maxX; x += rimStep) {
-    rimPoints.push({ x, y: minY, z: 0, lat: 0, lng: 0 });
-    rimPoints.push({ x, y: maxY, z: 0, lat: 0, lng: 0 });
-  }
-  for (let y = minY; y <= maxY; y += rimStep) {
-    rimPoints.push({ x: minX, y, z: 0, lat: 0, lng: 0 });
-    rimPoints.push({ x: maxX, y, z: 0, lat: 0, lng: 0 });
-  }
-  const baseIndex = densePoints.length;
-  if (rimPoints.length) {
-    // Append rim positions, flattened at z=0 so it smoothly fades
-    const newPositions = new Float32Array(
-      (densePoints.length + rimPoints.length) * 3,
-    );
-    newPositions.set(positions);
-    for (let i = 0; i < rimPoints.length; i++) {
-      const p = rimPoints[i]!;
-      const j = (baseIndex + i) * 3;
-      newPositions[j] = p.x;
-      newPositions[j + 1] = p.z; // 0
-      newPositions[j + 2] = p.y;
-    }
-    geom.setAttribute("position", new Float32BufferAttribute(newPositions, 3));
-
-    // Create simple quads along edges by connecting to nearest existing vertices using coarse gridding
-    for (let y = minY; y < maxY; y += rimStep) {
-      const i0 =
-        baseIndex +
-        Math.floor(
-          ((y - minY) / rimStep) * 2 +
-            (2 * Math.floor((maxX - minX) / rimStep) + 2) * 1,
-        );
-      const i1 = i0 + 2;
-      // Find nearest interior points at same y via linear scan (small set)
-      let nearestL = -1;
-      let nearestR = -1;
-      let bestLd = Infinity,
-        bestRd = Infinity;
-      for (let vi = 0; vi < densePoints.length; vi++) {
-        const p = densePoints[vi]!;
-        if (Math.abs(p.y - y) > rimStep) continue;
-        if (p.x < minX + rimStep && minX - p.x < bestLd) {
-          bestLd = minX - p.x;
-          nearestL = vi;
-        }
-        if (p.x > maxX - rimStep && p.x - maxX < bestRd) {
-          bestRd = p.x - maxX;
-          nearestR = vi;
-        }
-      }
-      if (nearestL >= 0) triangleIndices.push(nearestL, i0, i0 + 2);
-      if (nearestR >= 0) triangleIndices.push(nearestR, i1, i1 + 2);
-    }
-  }
-}
+// (previous boundary rim helper removed; rim is now baked into augmentedPoints before triangulation)
 
 interface DenseTerrainMeshProps {
   densePoints: DensePoint[];
@@ -157,6 +95,7 @@ interface DenseTerrainSurfaceProps {
     points: { x: number; y: number }[];
   }>;
   highlightRadius?: number;
+  segmentIndex?: SegmentGridIndex;
 }
 
 /**
@@ -171,6 +110,7 @@ export function DenseTerrainSurface({
   opacity = 0.3,
   projectedActivities,
   highlightRadius = 5,
+  segmentIndex,
 }: DenseTerrainSurfaceProps) {
   const surfaceGeometry = useMemo(() => {
     const start =
@@ -212,33 +152,11 @@ export function DenseTerrainSurface({
         positions.push(x, closestZ, y);
         altitudes.push(closestZ);
         // proximity-based color blending to show trails on the surface
-        let trailness = 0;
-        if (projectedActivities && projectedActivities.length > 0) {
-          const r2 = highlightRadius * highlightRadius;
-          outer: for (const a of projectedActivities) {
-            const pts = a.points;
-            for (let k = 0; k < pts.length - 1; k++) {
-              const p0 = pts[k]!;
-              const p1 = pts[k + 1]!;
-              const vx = p1.x - p0.x;
-              const vy = p1.y - p0.y;
-              const wx = x - p0.x;
-              const wy = y - p0.y;
-              const vv = vx * vx + vy * vy || 1e-9;
-              let t = (wx * vx + wy * vy) / vv;
-              t = Math.max(0, Math.min(1, t));
-              const projx = p0.x + t * vx;
-              const projy = p0.y + t * vy;
-              const dx = x - projx;
-              const dy = y - projy;
-              const d2 = dx * dx + dy * dy;
-              if (d2 <= r2) {
-                trailness = 1;
-                break outer;
-              }
-            }
-          }
-        }
+        const trailness = segmentIndex
+          ? isPointNearAnySegment(segmentIndex, x, y, highlightRadius)
+            ? 1
+            : 0
+          : computeTrailnessAtPoint(projectedActivities, highlightRadius, x, y);
         // Mix base surface color with trail color based on trailness (0 or 1)
         const baseCol = new Color(color);
         const mixed = baseCol.clone().lerp(trailColor, trailness);
@@ -328,6 +246,7 @@ export function DenseTerrainSurface({
     color,
     projectedActivities,
     highlightRadius,
+    segmentIndex,
   ]);
 
   return (
@@ -355,6 +274,110 @@ interface AdaptiveTerrainSurfaceProps {
   }>;
   maxEdgeLength?: number; // in projected units; triangles with longer edges are dropped
   mapBounds?: { minX: number; maxX: number; minY: number; maxY: number };
+  segmentIndex?: SegmentGridIndex;
+}
+
+/**
+ * Compute trailness (0 or 1) for a surface point based on proximity to any
+ * activity polyline segment. Returns 1 on first segment within radius; else 0.
+ */
+function computeTrailnessAtPoint(
+  projectedActivities:
+    | { id?: string | number; points: { x: number; y: number }[] }[]
+    | undefined,
+  highlightRadius: number,
+  x: number,
+  y: number,
+): number {
+  if (!projectedActivities || projectedActivities.length === 0) return 0;
+  if (!Number.isFinite(highlightRadius) || highlightRadius <= 0) return 0;
+
+  // Use squared radius so we can compare squared distances without computing costly square roots.
+  // sqrt is monotonic, so (dx^2 + dy^2) <= r^2 is equivalent to distance <= r.
+  const radiusSquared = highlightRadius * highlightRadius;
+
+  for (const activity of projectedActivities) {
+    const points = activity.points;
+    if (!points || points.length < 2) continue;
+    for (let k = 0; k < points.length - 1; k++) {
+      const p0 = points[k]!;
+      const p1 = points[k + 1]!;
+      const segX = p1.x - p0.x;
+      const segY = p1.y - p0.y;
+      const toPointX = x - p0.x;
+      const toPointY = y - p0.y;
+      const segLen2 = segX * segX + segY * segY || 1e-9;
+      let t = (toPointX * segX + toPointY * segY) / segLen2;
+      if (t < 0) t = 0;
+      else if (t > 1) t = 1;
+      const closestX = p0.x + t * segX;
+      const closestY = p0.y + t * segY;
+      const dx = x - closestX;
+      const dy = y - closestY;
+      if (dx * dx + dy * dy <= radiusSquared) return 1;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Boolean variant: checks whether a point (vertexX, vertexY) is within
+ * searchRadius of any projected activity polyline segment.
+ * Uses early returns for clarity.
+ */
+function isVertexOnAnyActivityTrail(
+  projectedActivities:
+    | { id?: string | number; points: { x: number; y: number }[] }[]
+    | undefined,
+  vertexX: number,
+  vertexY: number,
+  searchRadius: number,
+): boolean {
+  if (!projectedActivities || projectedActivities.length === 0) return false;
+  if (!Number.isFinite(searchRadius) || searchRadius <= 0) return false;
+
+  // Same squared-distance trick here: avoid Math.sqrt by comparing to r^2 directly.
+  const radiusSquared = searchRadius * searchRadius;
+
+  for (const activity of projectedActivities) {
+    const polyline = activity.points;
+    if (!polyline || polyline.length < 2) continue;
+
+    for (
+      let segmentIndex = 0;
+      segmentIndex < polyline.length - 1;
+      segmentIndex++
+    ) {
+      const start = polyline[segmentIndex]!;
+      const end = polyline[segmentIndex + 1]!;
+
+      const segmentDeltaX = end.x - start.x;
+      const segmentDeltaY = end.y - start.y;
+      const fromStartToVertexX = vertexX - start.x;
+      const fromStartToVertexY = vertexY - start.y;
+
+      const segmentLengthSquared =
+        segmentDeltaX * segmentDeltaX + segmentDeltaY * segmentDeltaY || 1e-9;
+      let unitT =
+        (fromStartToVertexX * segmentDeltaX +
+          fromStartToVertexY * segmentDeltaY) /
+        segmentLengthSquared;
+      if (unitT < 0) unitT = 0;
+      else if (unitT > 1) unitT = 1;
+
+      const closestPointX = start.x + unitT * segmentDeltaX;
+      const closestPointY = start.y + unitT * segmentDeltaY;
+
+      const distanceX = vertexX - closestPointX;
+      const distanceY = vertexY - closestPointY;
+
+      // Squared distance from vertex to closest point on segment
+      const distanceSquared = distanceX * distanceX + distanceY * distanceY;
+      if (distanceSquared <= radiusSquared) return true;
+    }
+  }
+
+  return false;
 }
 
 export function AdaptiveTerrainSurface({
@@ -364,6 +387,7 @@ export function AdaptiveTerrainSurface({
   projectedActivities,
   maxEdgeLength,
   mapBounds,
+  segmentIndex,
 }: AdaptiveTerrainSurfaceProps) {
   const geometry = useMemo(() => {
     const start =
@@ -377,48 +401,57 @@ export function AdaptiveTerrainSurface({
       return geom;
     }
 
-    // Positions: use densePoints order for vertex buffer
+    // Estimate max edge length once (used for rim spacing if provided)
+    const maxEdge =
+      maxEdgeLength ?? estimateMaxEdgeLengthFromPoints(densePoints);
+
+    // Optionally augment with a boundary rim prior to triangulation so the
+    // surface properly reaches the map edges
+    let augmentedPoints: DensePoint[] = densePoints;
+    if (mapBounds) {
+      const { minX, maxX, minY, maxY } = mapBounds;
+      const rimStep = Math.max(1e-3, maxEdge / 2);
+      const rimPoints: DensePoint[] = [];
+      // Top and bottom edges
+      for (let x = minX; x <= maxX; x += rimStep) {
+        rimPoints.push({ x, y: minY, z: 0, lat: 0, lng: 0 });
+        rimPoints.push({ x, y: maxY, z: 0, lat: 0, lng: 0 });
+      }
+      // Left and right edges
+      for (let y = minY; y <= maxY; y += rimStep) {
+        rimPoints.push({ x: minX, y, z: 0, lat: 0, lng: 0 });
+        rimPoints.push({ x: maxX, y, z: 0, lat: 0, lng: 0 });
+      }
+      if (rimPoints.length > 0) {
+        augmentedPoints = densePoints.concat(rimPoints);
+      }
+    }
+
+    // Positions: use augmented order for vertex buffer
     const positions = Float32Array.from(
-      densePoints.flatMap((p) => [p.x, p.z, p.y]),
+      augmentedPoints.flatMap((p) => [p.x, p.z, p.y]),
     );
     geom.setAttribute("position", new Float32BufferAttribute(positions, 3));
 
-    // Delaunay triangulation over XY
-    const coords = buildDelaunayCoords(densePoints);
-    const DelaunatorCtor = Delaunator as unknown as new (
-      coords: ArrayLike<number>,
-    ) => { triangles: Uint32Array };
-    const delaunay = new DelaunatorCtor(coords as ArrayLike<number>);
+    // Delaunay triangulation over XY (use augmented points)
+    const coords = buildDelaunayCoords(augmentedPoints);
+    const delaunay = new Delaunator(coords as ArrayLike<number>);
     // Triangle index buffer (triplets of vertex indices)
     const triangleIndices: number[] = [];
-
-    const maxEdge =
-      maxEdgeLength ?? estimateMaxEdgeLengthFromPoints(densePoints);
 
     const tris: Uint32Array = delaunay.triangles;
     for (let t = 0; t < tris.length; t += 3) {
       const a = tris[t] ?? 0;
       const b = tris[t + 1] ?? 0;
       const c = tris[t + 2] ?? 0;
-      const pa = densePoints[a]!;
-      const pb = densePoints[b]!;
-      const pc = densePoints[c]!;
+      const pa = augmentedPoints[a]!;
+      const pb = augmentedPoints[b]!;
+      const pc = augmentedPoints[c]!;
       const ab = Math.hypot(pb.x - pa.x, pb.y - pa.y);
       const bc = Math.hypot(pc.x - pb.x, pc.y - pb.y);
       const ca = Math.hypot(pa.x - pc.x, pa.y - pc.y);
       if (ab > maxEdge || bc > maxEdge || ca > maxEdge) continue;
       triangleIndices.push(a, b, c);
-    }
-    // If bounds are provided, add a thin rim of boundary triangles so the surface reaches the map edges
-    if (mapBounds) {
-      addBoundaryRim(
-        geom,
-        positions,
-        densePoints,
-        mapBounds,
-        maxEdge,
-        triangleIndices,
-      );
     }
     geom.setIndex(triangleIndices);
     geom.computeVertexNormals();
@@ -430,7 +463,7 @@ export function AdaptiveTerrainSurface({
       normalsAttr = geom.getAttribute("normal");
     }
     const normals = normalsAttr as Float32BufferAttribute;
-    const colorArray: number[] = new Array(densePoints.length * 3).fill(0);
+    const colorArray: number[] = new Array(augmentedPoints.length * 3).fill(0);
     const base = new Color(color);
     const baseHSL = { h: 0, s: 0, l: 0 } as { h: number; s: number; l: number };
     base.getHSL(baseHSL);
@@ -446,39 +479,18 @@ export function AdaptiveTerrainSurface({
     // Optional trail proximity coloring
     const trailColor = new Color("#A0522D"); // sienna (lighter dirt tone)
     const trailColors: number[] | undefined = projectedActivities?.length
-      ? new Array(densePoints.length * 3).fill(0)
+      ? new Array(augmentedPoints.length * 3).fill(0)
       : undefined;
     if (trailColors) {
       // For each vertex, check shortest distance to any segment (cheap O(N*M) for moderate sizes)
       // Make highlight radius much narrower (~10% of prior)
       const r = (maxEdgeLength ?? Math.sqrt(denom) + 1) * 0.075;
-      const r2 = r * r;
-      for (let i = 0; i < densePoints.length; i++) {
-        const vx = densePoints[i]!.x;
-        const vy = densePoints[i]!.y;
-        let onTrail = false;
-        outer: for (const a of projectedActivities ?? []) {
-          const pts = a.points;
-          for (let k = 0; k < pts.length - 1; k++) {
-            const p0 = pts[k]!;
-            const p1 = pts[k + 1]!;
-            const sx = p1.x - p0.x;
-            const sy = p1.y - p0.y;
-            const wx = vx - p0.x;
-            const wy = vy - p0.y;
-            const ss = sx * sx + sy * sy || 1e-9;
-            let t = (wx * sx + wy * sy) / ss;
-            t = Math.max(0, Math.min(1, t));
-            const cx = p0.x + t * sx;
-            const cy = p0.y + t * sy;
-            const dx = vx - cx;
-            const dy = vy - cy;
-            if (dx * dx + dy * dy <= r2) {
-              onTrail = true;
-              break outer;
-            }
-          }
-        }
+      for (let i = 0; i < augmentedPoints.length; i++) {
+        const vx = augmentedPoints[i]!.x;
+        const vy = augmentedPoints[i]!.y;
+        const onTrail = segmentIndex
+          ? isPointNearAnySegment(segmentIndex, vx, vy, r)
+          : isVertexOnAnyActivityTrail(projectedActivities, vx, vy, r);
         const idx3 = i * 3;
         const baseCol = new Color(color);
         const mix = baseCol.clone().lerp(trailColor, onTrail ? 1 : 0);
@@ -488,8 +500,8 @@ export function AdaptiveTerrainSurface({
       }
     }
 
-    for (let i = 0; i < densePoints.length; i++) {
-      const p = densePoints[i]!;
+    for (let i = 0; i < augmentedPoints.length; i++) {
+      const p = augmentedPoints[i]!;
       const tAlt = Math.min(1, Math.max(0, (p.z - minZ) / denom));
       const ny = Math.max(0, Math.min(1, normals.getY(i)));
       const slope = 1 - ny;
@@ -530,7 +542,14 @@ export function AdaptiveTerrainSurface({
     );
 
     return geom;
-  }, [densePoints, color, projectedActivities, maxEdgeLength, mapBounds]);
+  }, [
+    densePoints,
+    color,
+    projectedActivities,
+    maxEdgeLength,
+    mapBounds,
+    segmentIndex,
+  ]);
 
   return (
     <mesh geometry={geometry}>

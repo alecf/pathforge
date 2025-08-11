@@ -14,6 +14,10 @@ import {
   deriveGridSpacings,
   useMapProjection,
 } from "~/util/mapUtils";
+import {
+  buildSegmentGridIndex,
+  type SegmentGridIndex,
+} from "~/util/spatialIndex";
 import { AdaptiveTerrainSurface, DenseTerrainMesh } from "./DenseTerrainMesh";
 import {
   type ActivityWithStreams,
@@ -275,6 +279,16 @@ export function StravaActivity3DMap({
     width,
     height,
   });
+
+  // Memoized spatial indices for current visible activities
+  const { segmentIndex } = useMemo(() => {
+    const simple = projectedActivities.map((a) => ({
+      id: a.id,
+      points: a.points.map((p) => ({ x: p.x, y: p.y })),
+    }));
+    const sIndex: SegmentGridIndex | undefined = buildSegmentGridIndex(simple);
+    return { segmentIndex: sIndex };
+  }, [projectedActivities]);
 
   const altitudeBounds = useMemo(() => {
     return calculateAltitudeBounds(activities);
@@ -581,8 +595,9 @@ export function StravaActivity3DMap({
               <AdaptiveTerrainSurface
                 densePoints={densePoints}
                 color="#22c55e"
-                opacity={0.5}
+                opacity={0.6}
                 projectedActivities={projectedActivities}
+                segmentIndex={segmentIndex}
                 mapBounds={{
                   minX: bounds.minX,
                   maxX: bounds.maxX,

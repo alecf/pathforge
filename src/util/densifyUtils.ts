@@ -282,9 +282,7 @@ function delaunayDensification(
     coords[2 * i + 1] = pts[i]!.y;
   }
 
-  const delaunay = new (Delaunator as unknown as new (
-    coords: ArrayLike<number>,
-  ) => { triangles: Uint32Array })(coords as ArrayLike<number>);
+  const delaunay = new Delaunator(coords as ArrayLike<number>);
   const triangles = delaunay.triangles; // indices into pts
 
   // Barycentric helper
