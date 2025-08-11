@@ -82,8 +82,8 @@ function interpolateDensePoints(
     });
   });
 
-  // Add padding
-  const padding = 50;
+  // Add padding (reduced to minimize wide flat borders)
+  const padding = 10;
   minX -= padding;
   maxX += padding;
   minY -= padding;
@@ -110,7 +110,7 @@ function interpolateDensePoints(
   const width = maxX - minX;
   const height = maxY - minY;
   const stepSize = computeAdaptiveStep(density, width, height);
-  const searchRadius = Math.max(5, stepSize * 5);
+  const searchRadius = Math.max(3, stepSize * 2);
   const maxRadius2 = searchRadius * searchRadius;
   const densePoints: DensePoint[] = [];
 
@@ -192,7 +192,7 @@ function mlsDensification(
   const width = maxX - minX;
   const height = maxY - minY;
   const step = computeAdaptiveStep(density, width, height);
-  const searchRadius = Math.max(5, step * 5); // neighborhood radius
+  const searchRadius = Math.max(3, step * 2); // narrower neighborhood radius
   const twoSigma2 = (searchRadius * 0.6) ** 2 * 2; // Gaussian kernel variance
 
   const densePoints: DensePoint[] = [];

@@ -3,6 +3,7 @@
 import { Grid, Line, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import type { GeoProjection } from "d3";
+import KDBush from "kdbush";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
 import { Vector3 } from "three";
@@ -13,7 +14,7 @@ import {
   deriveGridSpacings,
   useMapProjection,
 } from "~/util/mapUtils";
-import { DenseTerrainMesh, DenseTerrainSurface } from "./DenseTerrainMesh";
+import { AdaptiveTerrainSurface, DenseTerrainMesh } from "./DenseTerrainMesh";
 import {
   type ActivityWithStreams,
   type ProjectedActivity,
@@ -32,11 +33,15 @@ interface ActivityLinesProps {
     maxAltitude: number;
     hasAltitudeData: boolean;
   };
+  sampleZAt?: (x: number, y: number) => number | undefined;
+  snapOffset?: number;
 }
 
 function ActivityLines({
   projectedActivities,
   altitudeBounds,
+  sampleZAt,
+  snapOffset = 0.2,
 }: ActivityLinesProps) {
   const { minAltitude, maxAltitude, hasAltitudeData } = altitudeBounds;
 
@@ -49,6 +54,8 @@ function ActivityLines({
           minAltitude={minAltitude}
           maxAltitude={maxAltitude}
           hasAltitudeData={hasAltitudeData}
+          sampleZAt={sampleZAt}
+          snapOffset={snapOffset}
         />
       ))}
     </>
@@ -60,6 +67,8 @@ interface ActivityLineProps {
   minAltitude: number;
   maxAltitude: number;
   hasAltitudeData: boolean;
+  sampleZAt?: (x: number, y: number) => number | undefined;
+  snapOffset?: number;
 }
 
 function ActivityLine({
@@ -67,12 +76,24 @@ function ActivityLine({
   minAltitude,
   maxAltitude,
   hasAltitudeData,
+  sampleZAt,
+  snapOffset = 0.2,
 }: ActivityLineProps) {
   const points = useMemo(() => {
     return activity.points.map((point) => {
-      // Normalize altitude to 0-100 range (Y axis is up in three.js)
+      // Optionally snap to surface height using sampler
       let normalizedAltitude = 0;
-      if (hasAltitudeData && point.altitude !== undefined) {
+      if (sampleZAt) {
+        const z = sampleZAt(point.x, point.y);
+        if (typeof z === "number" && Number.isFinite(z)) {
+          normalizedAltitude = z + snapOffset; // slight offset to avoid z-fighting
+        }
+      }
+      if (
+        normalizedAltitude === 0 &&
+        hasAltitudeData &&
+        point.altitude !== undefined
+      ) {
         normalizedAltitude =
           ((point.altitude - minAltitude) / (maxAltitude - minAltitude)) * 100;
       }
@@ -80,7 +101,14 @@ function ActivityLine({
       // Map projected coordinates: X -> X, Y -> Z (depth), altitude -> Y (up)
       return [point.x, normalizedAltitude, point.y] as [number, number, number];
     });
-  }, [activity.points, minAltitude, maxAltitude, hasAltitudeData]);
+  }, [
+    activity.points,
+    minAltitude,
+    maxAltitude,
+    hasAltitudeData,
+    sampleZAt,
+    snapOffset,
+  ]);
 
   if (points.length < 2) return null;
 
@@ -227,16 +255,19 @@ export function StravaActivity3DMap({
   const [isDensifying, setIsDensifying] = useState(false);
   const [showDenseTerrain, setShowDenseTerrain] = useState(false);
   const [renderMode, setRenderMode] = useState<"mesh" | "surface">("mesh");
+  const [snapLines, setSnapLines] = useState<boolean>(true);
   const [selectedMethod, setSelectedMethod] = useState<
     "mls" | "interpolation" | "delaunay"
-  >(
-    "mls",
-  );
+  >("mls");
   // Cache terrain per selection of activities and method
   const [cacheBySelection, setCacheBySelection] = useState<
     Record<
       string,
-      { mls?: DensePoint[]; interpolation?: DensePoint[]; delaunay?: DensePoint[] }
+      {
+        mls?: DensePoint[];
+        interpolation?: DensePoint[];
+        delaunay?: DensePoint[];
+      }
     >
   >({});
   const { projectedActivities, projection } = useMapProjection({
@@ -287,6 +318,44 @@ export function StravaActivity3DMap({
   const maxSize = Math.max(sizeX, sizeZ);
   const cameraDistance = Math.max(maxSize * 3, 300); // Position camera further out, with minimum distance
 
+  // Build a sampler over dense points to snap lines to the surface
+  const sampleZAt = useMemo(() => {
+    if (!densePoints.length) return undefined;
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
+    for (const p of densePoints) {
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const area = Math.max(1, (maxX - minX) * (maxY - minY));
+    const stepEstimate = Math.sqrt(area / Math.max(1, densePoints.length));
+    const r = Math.max(5, stepEstimate * 2);
+    const index = new KDBush(densePoints.length, 16, Float32Array);
+    for (const p of densePoints) index.add(p.x, p.y);
+    index.finish();
+    return (x: number, y: number): number | undefined => {
+      const ids = index.range(x - r, y - r, x + r, y + r);
+      if (!ids.length) return undefined;
+      let bestD2 = Infinity;
+      let bestZ: number | undefined;
+      for (const id of ids) {
+        const s = densePoints[id]!;
+        const dx = s.x - x;
+        const dy = s.y - y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          bestZ = s.z;
+        }
+      }
+      return bestZ;
+    };
+  }, [densePoints]);
+
   // Key representing the current set of selected activities
   const selectionKey = useMemo(() => {
     return activities
@@ -302,6 +371,8 @@ export function StravaActivity3DMap({
     if (projectedActivities.length === 0) return;
     setIsDensifying(true);
     try {
+      const t0 =
+        typeof performance !== "undefined" ? performance.now() : Date.now();
       console.log(`🚀 Starting terrain densification using ${method}...`);
       const result = await densify(projectedActivities, {
         method,
@@ -323,8 +394,12 @@ export function StravaActivity3DMap({
         },
       }));
       setShowDenseTerrain(true);
+      const t1 =
+        typeof performance !== "undefined" ? performance.now() : Date.now();
       console.log(
-        `✅ Terrain generation complete: ${result.densePoints.length} points (${method})`,
+        `✅ Terrain generation complete: ${result.densePoints.length} points (${method}) in ${(
+          t1 - t0
+        ).toFixed(1)}ms`,
       );
     } catch (error) {
       console.error("❌ Densification failed:", error);
@@ -420,6 +495,16 @@ export function StravaActivity3DMap({
           </button>
         </div>
 
+        {/* Snap lines toggle */}
+        <label className="flex items-center gap-2 text-xs text-white">
+          <input
+            type="checkbox"
+            checked={snapLines}
+            onChange={(e) => setSnapLines(e.target.checked)}
+          />
+          Snap lines to surface
+        </label>
+
         {/* Show/Hide Terrain checkbox with lazy generation */}
         <label className="flex items-center gap-2 text-xs text-white">
           <input
@@ -479,6 +564,7 @@ export function StravaActivity3DMap({
         <ActivityLines
           projectedActivities={projectedActivities}
           altitudeBounds={altitudeBounds}
+          sampleZAt={snapLines ? sampleZAt : undefined}
         />
 
         {/* Dense terrain */}
@@ -492,19 +578,17 @@ export function StravaActivity3DMap({
                 opacity={0.4}
               />
             ) : (
-              <DenseTerrainSurface
+              <AdaptiveTerrainSurface
                 densePoints={densePoints}
-                bounds={{
+                color="#22c55e"
+                opacity={0.5}
+                projectedActivities={projectedActivities}
+                mapBounds={{
                   minX: bounds.minX,
                   maxX: bounds.maxX,
                   minY: bounds.minY,
                   maxY: bounds.maxY,
-                  minZ: 0,
-                  maxZ: 100,
                 }}
-                resolution={30}
-                color="#22c55e"
-                opacity={0.5}
               />
             )}
           </>
