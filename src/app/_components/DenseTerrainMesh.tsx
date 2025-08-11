@@ -90,12 +90,8 @@ interface DenseTerrainSurfaceProps {
   resolution?: number;
   color?: string;
   opacity?: number;
-  projectedActivities?: Array<{
-    id?: string | number;
-    points: { x: number; y: number }[];
-  }>;
   highlightRadius?: number;
-  segmentIndex?: SegmentGridIndex;
+  segmentIndex: SegmentGridIndex;
 }
 
 /**
@@ -108,7 +104,6 @@ export function DenseTerrainSurface({
   resolution = 50,
   color = "#4ade80",
   opacity = 0.3,
-  projectedActivities,
   highlightRadius = 5,
   segmentIndex,
 }: DenseTerrainSurfaceProps) {
@@ -152,11 +147,14 @@ export function DenseTerrainSurface({
         positions.push(x, closestZ, y);
         altitudes.push(closestZ);
         // proximity-based color blending to show trails on the surface
-        const trailness = segmentIndex
-          ? isPointNearAnySegment(segmentIndex, x, y, highlightRadius)
-            ? 1
-            : 0
-          : computeTrailnessAtPoint(projectedActivities, highlightRadius, x, y);
+        const trailness = isPointNearAnySegment(
+          segmentIndex,
+          x,
+          y,
+          highlightRadius,
+        )
+          ? 1
+          : 0;
         // Mix base surface color with trail color based on trailness (0 or 1)
         const baseCol = new Color(color);
         const mixed = baseCol.clone().lerp(trailColor, trailness);
@@ -239,15 +237,7 @@ export function DenseTerrainSurface({
       ).toFixed(1)}ms`,
     );
     return geometry;
-  }, [
-    densePoints,
-    bounds,
-    resolution,
-    color,
-    projectedActivities,
-    highlightRadius,
-    segmentIndex,
-  ]);
+  }, [densePoints, bounds, resolution, color, highlightRadius, segmentIndex]);
 
   return (
     <mesh geometry={surfaceGeometry}>
@@ -268,123 +258,17 @@ interface AdaptiveTerrainSurfaceProps {
   densePoints: DensePoint[];
   color?: string;
   opacity?: number;
-  projectedActivities?: Array<{
-    id?: string | number;
-    points: { x: number; y: number }[];
-  }>;
   maxEdgeLength?: number; // in projected units; triangles with longer edges are dropped
   mapBounds?: { minX: number; maxX: number; minY: number; maxY: number };
-  segmentIndex?: SegmentGridIndex;
+  segmentIndex: SegmentGridIndex;
 }
 
-/**
- * Compute trailness (0 or 1) for a surface point based on proximity to any
- * activity polyline segment. Returns 1 on first segment within radius; else 0.
- */
-function computeTrailnessAtPoint(
-  projectedActivities:
-    | { id?: string | number; points: { x: number; y: number }[] }[]
-    | undefined,
-  highlightRadius: number,
-  x: number,
-  y: number,
-): number {
-  if (!projectedActivities || projectedActivities.length === 0) return 0;
-  if (!Number.isFinite(highlightRadius) || highlightRadius <= 0) return 0;
-
-  // Use squared radius so we can compare squared distances without computing costly square roots.
-  // sqrt is monotonic, so (dx^2 + dy^2) <= r^2 is equivalent to distance <= r.
-  const radiusSquared = highlightRadius * highlightRadius;
-
-  for (const activity of projectedActivities) {
-    const points = activity.points;
-    if (!points || points.length < 2) continue;
-    for (let k = 0; k < points.length - 1; k++) {
-      const p0 = points[k]!;
-      const p1 = points[k + 1]!;
-      const segX = p1.x - p0.x;
-      const segY = p1.y - p0.y;
-      const toPointX = x - p0.x;
-      const toPointY = y - p0.y;
-      const segLen2 = segX * segX + segY * segY || 1e-9;
-      let t = (toPointX * segX + toPointY * segY) / segLen2;
-      if (t < 0) t = 0;
-      else if (t > 1) t = 1;
-      const closestX = p0.x + t * segX;
-      const closestY = p0.y + t * segY;
-      const dx = x - closestX;
-      const dy = y - closestY;
-      if (dx * dx + dy * dy <= radiusSquared) return 1;
-    }
-  }
-  return 0;
-}
-
-/**
- * Boolean variant: checks whether a point (vertexX, vertexY) is within
- * searchRadius of any projected activity polyline segment.
- * Uses early returns for clarity.
- */
-function isVertexOnAnyActivityTrail(
-  projectedActivities:
-    | { id?: string | number; points: { x: number; y: number }[] }[]
-    | undefined,
-  vertexX: number,
-  vertexY: number,
-  searchRadius: number,
-): boolean {
-  if (!projectedActivities || projectedActivities.length === 0) return false;
-  if (!Number.isFinite(searchRadius) || searchRadius <= 0) return false;
-
-  // Same squared-distance trick here: avoid Math.sqrt by comparing to r^2 directly.
-  const radiusSquared = searchRadius * searchRadius;
-
-  for (const activity of projectedActivities) {
-    const polyline = activity.points;
-    if (!polyline || polyline.length < 2) continue;
-
-    for (
-      let segmentIndex = 0;
-      segmentIndex < polyline.length - 1;
-      segmentIndex++
-    ) {
-      const start = polyline[segmentIndex]!;
-      const end = polyline[segmentIndex + 1]!;
-
-      const segmentDeltaX = end.x - start.x;
-      const segmentDeltaY = end.y - start.y;
-      const fromStartToVertexX = vertexX - start.x;
-      const fromStartToVertexY = vertexY - start.y;
-
-      const segmentLengthSquared =
-        segmentDeltaX * segmentDeltaX + segmentDeltaY * segmentDeltaY || 1e-9;
-      let unitT =
-        (fromStartToVertexX * segmentDeltaX +
-          fromStartToVertexY * segmentDeltaY) /
-        segmentLengthSquared;
-      if (unitT < 0) unitT = 0;
-      else if (unitT > 1) unitT = 1;
-
-      const closestPointX = start.x + unitT * segmentDeltaX;
-      const closestPointY = start.y + unitT * segmentDeltaY;
-
-      const distanceX = vertexX - closestPointX;
-      const distanceY = vertexY - closestPointY;
-
-      // Squared distance from vertex to closest point on segment
-      const distanceSquared = distanceX * distanceX + distanceY * distanceY;
-      if (distanceSquared <= radiusSquared) return true;
-    }
-  }
-
-  return false;
-}
+// legacy per-activity proximity logic removed in favor of segment index
 
 export function AdaptiveTerrainSurface({
   densePoints,
   color = "#4ade80",
   opacity = 0.35,
-  projectedActivities,
   maxEdgeLength,
   mapBounds,
   segmentIndex,
@@ -478,9 +362,9 @@ export function AdaptiveTerrainSurface({
 
     // Optional trail proximity coloring
     const trailColor = new Color("#A0522D"); // sienna (lighter dirt tone)
-    const trailColors: number[] | undefined = projectedActivities?.length
-      ? new Array(augmentedPoints.length * 3).fill(0)
-      : undefined;
+    const trailColors: number[] | undefined = new Array(
+      augmentedPoints.length * 3,
+    ).fill(0);
     if (trailColors) {
       // For each vertex, check shortest distance to any segment (cheap O(N*M) for moderate sizes)
       // Make highlight radius much narrower (~10% of prior)
@@ -488,9 +372,7 @@ export function AdaptiveTerrainSurface({
       for (let i = 0; i < augmentedPoints.length; i++) {
         const vx = augmentedPoints[i]!.x;
         const vy = augmentedPoints[i]!.y;
-        const onTrail = segmentIndex
-          ? isPointNearAnySegment(segmentIndex, vx, vy, r)
-          : isVertexOnAnyActivityTrail(projectedActivities, vx, vy, r);
+        const onTrail = isPointNearAnySegment(segmentIndex, vx, vy, r);
         const idx3 = i * 3;
         const baseCol = new Color(color);
         const mix = baseCol.clone().lerp(trailColor, onTrail ? 1 : 0);
@@ -542,14 +424,7 @@ export function AdaptiveTerrainSurface({
     );
 
     return geom;
-  }, [
-    densePoints,
-    color,
-    projectedActivities,
-    maxEdgeLength,
-    mapBounds,
-    segmentIndex,
-  ]);
+  }, [densePoints, color, maxEdgeLength, mapBounds, segmentIndex]);
 
   return (
     <mesh geometry={geometry}>

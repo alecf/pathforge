@@ -591,12 +591,11 @@ export function StravaActivity3DMap({
                 color="#4ade80"
                 opacity={0.4}
               />
-            ) : (
+            ) : segmentIndex ? (
               <AdaptiveTerrainSurface
                 densePoints={densePoints}
                 color="#22c55e"
                 opacity={0.6}
-                projectedActivities={projectedActivities}
                 segmentIndex={segmentIndex}
                 mapBounds={{
                   minX: bounds.minX,
@@ -605,7 +604,7 @@ export function StravaActivity3DMap({
                   maxY: bounds.maxY,
                 }}
               />
-            )}
+            ) : null}
           </>
         )}
 
