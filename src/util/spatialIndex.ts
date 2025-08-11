@@ -36,7 +36,6 @@ export interface SegmentRecord {
 
 export interface SegmentGridIndex {
   tree: RBush<SegmentRecord>;
-  segments: SegmentRecord[];
   bounds: { minX: number; maxX: number; minY: number; maxY: number };
 }
 
@@ -142,7 +141,7 @@ export function buildSegmentGridIndex(
   if (segments.length === 0) return undefined;
   const tree = new RBush<SegmentRecord>(maxEntries ?? 9);
   tree.load(segments);
-  return { tree, segments, bounds: { minX, maxX, minY, maxY } };
+  return { tree, bounds: { minX, maxX, minY, maxY } };
 }
 
 export function querySegmentsNear(

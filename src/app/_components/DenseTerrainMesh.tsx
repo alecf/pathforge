@@ -1,6 +1,7 @@
 "use client";
 
 import Delaunator from "delaunator";
+import KDBush from "kdbush";
 import { useMemo } from "react";
 import {
   BufferGeometry,
@@ -290,24 +291,71 @@ export function AdaptiveTerrainSurface({
       maxEdgeLength ?? estimateMaxEdgeLengthFromPoints(densePoints);
 
     // Optionally augment with a boundary rim prior to triangulation so the
-    // surface properly reaches the map edges
+    // surface properly reaches the map edges. Rim vertices get z sampled from
+    // nearest dense point to avoid a flat zero-height border.
     let augmentedPoints: DensePoint[] = densePoints;
+    let denseCount = densePoints.length;
     if (mapBounds) {
       const { minX, maxX, minY, maxY } = mapBounds;
       const rimStep = Math.max(1e-3, maxEdge / 2);
+
+      // Build a lightweight spatial index over existing dense points for nearest z sampling
+      const kd = new KDBush(densePoints.length, 16, Float32Array);
+      for (const p of densePoints) kd.add(p.x, p.y);
+      kd.finish();
+      let sumZ = 0;
+      for (const p of densePoints) sumZ += p.z;
+      const avgZ = densePoints.length ? sumZ / densePoints.length : 0;
+      const searchR = Math.max(rimStep * 4, maxEdge * 2);
+      const searchR2 = searchR * searchR;
+      const sampleZ = (x: number, y: number): number => {
+        const ids = kd.range(
+          x - searchR,
+          y - searchR,
+          x + searchR,
+          y + searchR,
+        );
+        if (!ids.length) return avgZ;
+        let bestD2 = Infinity;
+        let bestZ = avgZ;
+        for (const id of ids) {
+          const s = densePoints[id]!;
+          const dx = s.x - x;
+          const dy = s.y - y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < bestD2 && d2 <= searchR2) {
+            bestD2 = d2;
+            bestZ = s.z;
+          }
+        }
+        return bestZ;
+      };
+
       const rimPoints: DensePoint[] = [];
       // Top and bottom edges
       for (let x = minX; x <= maxX; x += rimStep) {
-        rimPoints.push({ x, y: minY, z: 0, lat: 0, lng: 0 });
-        rimPoints.push({ x, y: maxY, z: 0, lat: 0, lng: 0 });
+        rimPoints.push({ x, y: minY, z: sampleZ(x, minY), lat: 0, lng: 0 });
+        rimPoints.push({ x, y: maxY, z: sampleZ(x, maxY), lat: 0, lng: 0 });
       }
       // Left and right edges
       for (let y = minY; y <= maxY; y += rimStep) {
-        rimPoints.push({ x: minX, y, z: 0, lat: 0, lng: 0 });
-        rimPoints.push({ x: maxX, y, z: 0, lat: 0, lng: 0 });
+        rimPoints.push({ x: minX, y, z: sampleZ(minX, y), lat: 0, lng: 0 });
+        rimPoints.push({ x: maxX, y, z: sampleZ(maxX, y), lat: 0, lng: 0 });
       }
-      if (rimPoints.length > 0) {
-        augmentedPoints = densePoints.concat(rimPoints);
+      // Also add a sparse interior scaffold grid to bridge large gaps between clusters
+      const width = maxX - minX;
+      const height = maxY - minY;
+      const gridStep = Math.max(maxEdge, Math.max(width, height) / 24);
+      const scaffold: DensePoint[] = [];
+      for (let x = minX; x <= maxX; x += gridStep) {
+        for (let y = minY; y <= maxY; y += gridStep) {
+          scaffold.push({ x, y, z: sampleZ(x, y), lat: 0, lng: 0 });
+        }
+      }
+      const extras = rimPoints.concat(scaffold);
+      if (extras.length > 0) {
+        augmentedPoints = densePoints.concat(extras);
+        denseCount = densePoints.length;
       }
     }
 
@@ -334,7 +382,18 @@ export function AdaptiveTerrainSurface({
       const ab = Math.hypot(pb.x - pa.x, pb.y - pa.y);
       const bc = Math.hypot(pc.x - pb.x, pc.y - pb.y);
       const ca = Math.hypot(pa.x - pc.x, pa.y - pc.y);
-      if (ab > maxEdge || bc > maxEdge || ca > maxEdge) continue;
+      // Allow longer edges for triangles that touch synthetic points (rim/scaffold)
+      // so the surface always spans large gaps to the map bounds.
+      const touchesSynthetic =
+        a >= denseCount || b >= denseCount || c >= denseCount;
+      const globalLimit = mapBounds
+        ? Math.hypot(
+            mapBounds.maxX - mapBounds.minX,
+            mapBounds.maxY - mapBounds.minY,
+          )
+        : Infinity;
+      const edgeLimit = touchesSynthetic ? globalLimit : maxEdge * 12;
+      if (ab > edgeLimit || bc > edgeLimit || ca > edgeLimit) continue;
       triangleIndices.push(a, b, c);
     }
     geom.setIndex(triangleIndices);
