@@ -56,43 +56,54 @@ export default function RecentMapPage() {
     });
   }, [detailErrors]);
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-lg text-gray-700">Loading activities...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-lg text-red-500">
-          Error loading activities: {error.message}
-        </div>
-      </div>
-    );
-  }
-
-  if (!activities || activities.length === 0) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-lg text-gray-700">No activities found.</div>
-      </div>
-    );
-  }
+  const hasActivities = !!activities && activities.length > 0;
 
   return (
     <>
       <div className="w-80 flex-shrink-0 overflow-y-auto">
-        <ActivityList
-          activities={activities}
-          onFilterChange={setFilteredActivities}
-        />
+        {hasActivities ? (
+          <ActivityList
+            // Mount only when activities are present so default selection = all
+            key={`list-${activities.length}`}
+            activities={activities}
+            onFilterChange={setFilteredActivities}
+          />
+        ) : (
+          <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Activities
+              </h3>
+            </div>
+
+            {error && (
+              <div className="mb-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+                Error loading activities: {error.message}
+              </div>
+            )}
+
+            {isLoading && (
+              <div className="mb-3 rounded border border-blue-200 bg-blue-50 p-2 text-sm text-blue-700">
+                Loading activities...
+              </div>
+            )}
+
+            <div className="flex flex-1 items-center justify-center text-sm text-gray-600">
+              {isLoading
+                ? "Fetching your recent activities…"
+                : "No activities to display."}
+            </div>
+          </div>
+        )}
       </div>
       <div className="relative flex-1">
-        {isLoadingDetails && (
+        {isLoading && (
           <div className="absolute top-4 right-4 z-10 rounded bg-blue-50 p-3 text-sm text-blue-700">
+            Loading activities...
+          </div>
+        )}
+        {isLoadingDetails && (
+          <div className="absolute top-4 right-4 z-10 mt-12 rounded bg-blue-50 p-3 text-sm text-blue-700">
             Loading detailed activity data...
           </div>
         )}

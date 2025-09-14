@@ -157,28 +157,40 @@ function ActivityLine({
   if (points.length < 2) return null;
 
   return (
-    <Line
-      points={points}
-      color={activity.color}
-      lineWidth={isHovered ? dynamicWidth * 2.2 : dynamicWidth}
-      frustumCulled={false}
-      onPointerOver={(e) => {
-        e.stopPropagation();
-        if (onHoverChange) onHoverChange(activity.id);
-        if (gl?.domElement) gl.domElement.style.cursor = "pointer";
-      }}
-      onPointerOut={(e) => {
-        e.stopPropagation();
-        if (onHoverChange) onHoverChange(null);
-        if (gl?.domElement) gl.domElement.style.cursor = "auto";
-      }}
-      onClick={(e) => {
-        e.stopPropagation();
-        const clientX = (e?.event as MouseEvent)?.clientX ?? 0;
-        const clientY = (e?.event as MouseEvent)?.clientY ?? 0;
-        if (onLineClick) onLineClick(activity, clientX, clientY);
-      }}
-    />
+    <>
+      {/* Visual line */}
+      <Line
+        points={points}
+        color={activity.color}
+        lineWidth={isHovered ? dynamicWidth * 2.2 : dynamicWidth}
+        frustumCulled={false}
+      />
+      {/* Invisible, thicker hit area for easier interaction */}
+      <Line
+        points={points}
+        color={activity.color}
+        lineWidth={Math.max(dynamicWidth * 6, 10)}
+        frustumCulled={false}
+        transparent
+        opacity={0}
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          if (onHoverChange) onHoverChange(activity.id);
+          if (gl?.domElement) gl.domElement.style.cursor = "pointer";
+        }}
+        onPointerOut={(e) => {
+          e.stopPropagation();
+          if (onHoverChange) onHoverChange(null);
+          if (gl?.domElement) gl.domElement.style.cursor = "auto";
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          const clientX = (e?.event as MouseEvent)?.clientX ?? 0;
+          const clientY = (e?.event as MouseEvent)?.clientY ?? 0;
+          if (onLineClick) onLineClick(activity, clientX, clientY);
+        }}
+      />
+    </>
   );
 }
 
