@@ -1,10 +1,7 @@
 "use client";
 
 import { type DetailedActivityResponse } from "strava-v3";
-import {
-  useActivities,
-  type ActivityWithStreams,
-} from "./StravaActivityMapUtils";
+import { useActivities, type ActivityWithStreams } from "./ActivityMapUtils";
 
 interface ActivityCardProps {
   activity: DetailedActivityResponse | ActivityWithStreams;
@@ -40,7 +37,6 @@ function ActivityCard({ activity }: ActivityCardProps) {
               </span>
             )}
           </div>
-          {/* Show additional details if available from detailed activity data */}
           {(activity.map?.polyline ?? activity.map?.summary_polyline) && (
             <p className="mt-1 text-xs text-green-600">Route data available</p>
           )}
@@ -63,7 +59,7 @@ function ActivityCard({ activity }: ActivityCardProps) {
 const activityParams = {
   per_page: 3,
 };
-export function StravaDashboard() {
+export function Dashboard() {
   const { activities, isLoading, error, detailErrors, isLoadingDetails } =
     useActivities(activityParams);
 

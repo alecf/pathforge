@@ -7,19 +7,15 @@ import { useMapProjection } from "~/util/mapUtils";
 import {
   type ActivityWithStreams,
   type ProjectedPoint,
-} from "./StravaActivityMapUtils";
+} from "./ActivityMapUtils";
 
-interface StravaActivityMapProps {
+interface ActivityMapProps {
   activities: (DetailedActivityResponse | ActivityWithStreams)[];
   width?: number;
   height?: number;
 }
 
-export function StravaActivityMap({
-  activities,
-  width,
-  height,
-}: StravaActivityMapProps) {
+export function ActivityMap({ activities, width, height }: ActivityMapProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [dimensions, setDimensions] = useState({
     width: width ?? 800,

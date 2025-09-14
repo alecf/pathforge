@@ -6,7 +6,7 @@ import {
   getAvailableMethods,
   type DensePoint,
 } from "~/util/densifyUtils";
-import type { ProjectedActivity } from "./StravaActivityMapUtils";
+import type { ProjectedActivity } from "./ActivityMapUtils";
 
 // Sample projected activities for testing
 const sampleProjectedActivities: ProjectedActivity[] = [
@@ -149,7 +149,7 @@ export function DensificationDemo() {
       {result && (
         <div className="rounded bg-gray-100 p-4">
           <h3 className="mb-2 font-semibold">Result:</h3>
-          <pre className="whitespace-pre-wrap text-sm">{result}</pre>
+          <pre className="text-sm whitespace-pre-wrap">{result}</pre>
         </div>
       )}
 

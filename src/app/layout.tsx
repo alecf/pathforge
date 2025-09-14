@@ -8,8 +8,8 @@ import { TRPCReactProvider } from "~/trpc/react";
 import { AppHeader } from "./_components/AppHeader";
 
 export const metadata: Metadata = {
-  title: "Strava Raceways",
-  description: "Track your Strava activities and raceways",
+  title: "PathForge",
+  description: "Forge maps and insights from your activities",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 

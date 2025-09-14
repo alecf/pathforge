@@ -22,7 +22,7 @@ export function AppHeader() {
                 href="/"
                 className="text-xl font-semibold text-gray-900 transition-colors hover:text-orange-600"
               >
-                Strava Raceways
+                PathForge
               </Link>
             </div>
             <div className="flex items-center space-x-4">
@@ -44,7 +44,7 @@ export function AppHeader() {
                 href="/"
                 className="text-xl font-semibold text-gray-900 transition-colors hover:text-orange-600"
               >
-                Strava Raceways
+                PathForge
               </Link>
             </div>
             <div className="flex items-center space-x-4">
@@ -70,7 +70,7 @@ export function AppHeader() {
               href="/"
               className="text-xl font-semibold text-gray-900 transition-colors hover:text-orange-600"
             >
-              Strava Raceways
+              PathForge
             </Link>
             <nav className="hidden space-x-6 md:flex">
               <Link

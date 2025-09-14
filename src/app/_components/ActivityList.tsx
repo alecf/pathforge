@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
-import { decodePolyline } from "./StravaActivityMapUtils";
+import { decodePolyline } from "./ActivityMapUtils";
 
 // Helper function to get the number of points in a polyline
 function getPolylinePointCount(polyline: string | undefined): number {
@@ -15,15 +15,15 @@ function metersToMiles(meters: number): number {
   return meters / 1609.34;
 }
 
-interface StravaActivityListProps {
+interface ActivityListProps {
   activities: DetailedActivityResponse[];
   onFilterChange: (filteredActivities: DetailedActivityResponse[]) => void;
 }
 
-export function StravaActivityList({
+export function ActivityList({
   activities,
   onFilterChange,
-}: StravaActivityListProps) {
+}: ActivityListProps) {
   const [selectedActivities, setSelectedActivities] = useState<Set<string>>(
     new Set(activities.map((a) => a.id.toString())),
   );

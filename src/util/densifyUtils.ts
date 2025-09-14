@@ -1,6 +1,6 @@
 import Delaunator from "delaunator";
 import KDBush from "kdbush";
-import type { ProjectedActivity } from "~/app/_components/StravaActivityMapUtils";
+import type { ProjectedActivity } from "~/app/_components/ActivityMapUtils";
 
 function createIndex(points: { x: number; y: number; z: number }[]) {
   // KDBush v4 API: construct with number of items, then add(x, y), then finish()

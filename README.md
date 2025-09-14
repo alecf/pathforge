@@ -1,6 +1,6 @@
-# Strava Raceways
+# PathForge
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app` and configured for Strava authentication.
+This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app` and configured for authentication with Strava.
 
 ## Environment Variables
 
@@ -8,7 +8,7 @@ Create a `.env` file in the root directory with the following variables (all are
 
 ```env
 # Database
-DATABASE_URL="postgresql://username:password@localhost:5432/strava-raceways"
+DATABASE_URL="postgresql://username:password@localhost:5432/pathforge"
 
 # NextAuth
 AUTH_SECRET="your-auth-secret-here"
@@ -18,7 +18,7 @@ STRAVA_CLIENT_ID="your-strava-client-id"
 STRAVA_CLIENT_SECRET="your-strava-client-secret"
 ```
 
-## Strava OAuth Setup
+## OAuth Setup (Strava)
 
 1. Go to [Strava API Settings](https://www.strava.com/settings/api)
 2. Create a new application

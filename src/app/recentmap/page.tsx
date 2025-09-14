@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
-import { StravaActivityList } from "../_components/StravaActivityList";
-import { StravaActivityMapTabs } from "../_components/StravaActivityMapTabs";
+import { ActivityList } from "../_components/ActivityList";
+import { ActivityMapTabs } from "../_components/ActivityMapTabs";
 import {
   useActivities,
   type ActivityWithStreams,
-} from "../_components/StravaActivityMapUtils";
+} from "../_components/ActivityMapUtils";
 
 const activityParams = {
   per_page: 10,
@@ -59,7 +59,7 @@ export default function RecentMapPage() {
   return (
     <>
       <div className="w-80 flex-shrink-0 overflow-y-auto">
-        <StravaActivityList
+        <ActivityList
           activities={activities}
           onFilterChange={setFilteredActivities}
         />
@@ -75,7 +75,7 @@ export default function RecentMapPage() {
             Some activity details failed to load ({detailErrors.length} errors)
           </div>
         )}
-        <StravaActivityMapTabs activities={filteredActivities} />
+        <ActivityMapTabs activities={filteredActivities} />
       </div>
     </>
   );

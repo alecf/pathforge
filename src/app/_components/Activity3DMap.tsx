@@ -18,13 +18,13 @@ import {
   buildSegmentGridIndex,
   type SegmentGridIndex,
 } from "~/util/spatialIndex";
-import { AdaptiveTerrainSurface, DenseTerrainMesh } from "./DenseTerrainMesh";
 import {
   type ActivityWithStreams,
   type ProjectedActivity,
-} from "./StravaActivityMapUtils";
+} from "./ActivityMapUtils";
+import { AdaptiveTerrainSurface, DenseTerrainMesh } from "./DenseTerrainMesh";
 
-interface StravaActivity3DMapProps {
+interface Activity3DMapProps {
   activities: (DetailedActivityResponse | ActivityWithStreams)[];
   width: number;
   height: number;
@@ -266,11 +266,11 @@ function DynamicClipping({
   return null;
 }
 
-export function StravaActivity3DMap({
+export function Activity3DMap({
   activities,
   width,
   height,
-}: StravaActivity3DMapProps) {
+}: Activity3DMapProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const [densePoints, setDensePoints] = useState<DensePoint[]>([]);
   const [isDensifying, setIsDensifying] = useState(false);
@@ -438,11 +438,6 @@ export function StravaActivity3DMap({
       setIsDensifying(false);
     }
   };
-
-  // deprecated manual trigger (replaced by Show terrain checkbox)
-  // const handleDensify = async () => {
-  //   await runDensification(selectedMethod);
-  // };
 
   const handleSelectMethod = async (
     method: "mls" | "interpolation" | "delaunay",

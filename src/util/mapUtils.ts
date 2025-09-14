@@ -6,7 +6,7 @@ import {
   createProjection,
   decodePolyline as decodePolylineHelper,
   projectActivities,
-} from "~/app/_components/StravaActivityMapUtils";
+} from "~/app/_components/ActivityMapUtils";
 
 export interface MapViewProps {
   activities: (DetailedActivityResponse | ActivityWithStreams)[];

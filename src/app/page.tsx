@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { auth } from "~/server/auth";
 import { api, HydrateClient } from "~/trpc/server";
-import { StravaDashboard } from "./_components/StravaDashboard";
+import { Dashboard } from "./_components/Dashboard";
 
 export default async function Home() {
   const hello = await api.hello({ text: "from tRPC" });
@@ -13,7 +13,7 @@ export default async function Home() {
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col items-center justify-center gap-12">
           <h1 className="text-center text-5xl font-extrabold tracking-tight sm:text-[5rem]">
-            Strava <span className="text-orange-600">Raceways</span>
+            Path<span className="text-orange-600">Forge</span>
           </h1>
 
           {session ? (
@@ -26,19 +26,18 @@ export default async function Home() {
                   View Activity Map
                 </Link>
               </div>
-              <StravaDashboard />
+              <Dashboard />
             </div>
           ) : (
             <div className="text-center">
               <p className="mb-8 text-xl text-gray-600">
-                Connect your Strava account to start tracking your activities
-                and raceways.
+                Connect to start mapping and exploring your activities.
               </p>
               <Link
                 href="/api/auth/signin"
                 className="inline-flex items-center rounded-md border border-transparent bg-orange-600 px-6 py-3 text-base font-medium text-white hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:outline-none"
               >
-                Sign in with Strava
+                Sign in
               </Link>
             </div>
           )}

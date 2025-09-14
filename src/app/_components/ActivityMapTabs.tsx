@@ -3,17 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { StravaActivity3DMap } from "./StravaActivity3DMap";
-import { StravaActivityMap } from "./StravaActivityMap";
-import { type ActivityWithStreams } from "./StravaActivityMapUtils";
+import { Activity3DMap } from "./Activity3DMap";
+import { ActivityMap } from "./ActivityMap";
+import { type ActivityWithStreams } from "./ActivityMapUtils";
 
-interface StravaActivityMapTabsProps {
+interface ActivityMapTabsProps {
   activities: (DetailedActivityResponse | ActivityWithStreams)[];
 }
 
-export function StravaActivityMapTabs({
-  activities,
-}: StravaActivityMapTabsProps) {
+export function ActivityMapTabs({ activities }: ActivityMapTabsProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
@@ -42,7 +40,7 @@ export function StravaActivityMapTabs({
         </TabsList>
 
         <TabsContent value="2d" className="h-full w-full">
-          <StravaActivityMap
+          <ActivityMap
             activities={activities}
             width={dimensions.width}
             height={dimensions.height}
@@ -50,7 +48,7 @@ export function StravaActivityMapTabs({
         </TabsContent>
 
         <TabsContent value="3d" className="h-full w-full">
-          <StravaActivity3DMap
+          <Activity3DMap
             activities={activities}
             width={dimensions.width}
             height={dimensions.height}

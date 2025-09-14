@@ -46,9 +46,7 @@ export const stravaRouter = createTRPCRouter({
         const accessToken = await getStravaAccessToken(session.user.id);
 
         if (!accessToken) {
-          throw new Error(
-            "No valid Strava access token found. Please sign in again.",
-          );
+          throw new Error("No valid access token found. Please sign in again.");
         }
 
         // Initialize Strava client with the user's access token
@@ -73,9 +71,7 @@ export const stravaRouter = createTRPCRouter({
         const accessToken = await getStravaAccessToken(session.user.id);
 
         if (!accessToken) {
-          throw new Error(
-            "No valid Strava access token found. Please sign in again.",
-          );
+          throw new Error("No valid access token found. Please sign in again.");
         }
 
         // Initialize Strava client with the user's access token
@@ -107,9 +103,7 @@ export const stravaRouter = createTRPCRouter({
         const accessToken = await getStravaAccessToken(session.user.id);
 
         if (!accessToken) {
-          throw new Error(
-            "No valid Strava access token found. Please sign in again.",
-          );
+          throw new Error("No valid access token found. Please sign in again.");
         }
 
         // Initialize Strava client with the user's access token
@@ -145,9 +139,7 @@ export const stravaRouter = createTRPCRouter({
         const accessToken = await getStravaAccessToken(session.user.id);
 
         if (!accessToken) {
-          throw new Error(
-            "No valid Strava access token found. Please sign in again.",
-          );
+          throw new Error("No valid access token found. Please sign in again.");
         }
 
         // Initialize Strava client with the user's access token
