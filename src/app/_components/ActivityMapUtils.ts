@@ -123,9 +123,6 @@ export function createProjection(
   // Get all route points from all activities
   const allPoints: Array<[number, number]> = [];
 
-  if (activities.length > 1) {
-    console.log("first activity", activities[0]);
-  }
   activities.forEach((activity) => {
     const routeData = getActivityRouteData(activity);
     routeData.forEach((point) => {

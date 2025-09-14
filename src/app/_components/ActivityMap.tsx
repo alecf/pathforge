@@ -37,20 +37,6 @@ export function ActivityMap({ activities, width, height }: ActivityMapProps) {
       return;
     }
 
-    console.log(
-      "Activities received:",
-      activities.map((a) => ({
-        id: a.id,
-        name: a.name,
-        hasMap: !!a.map,
-        hasPolyline: !!(a.map?.polyline ?? a.map?.summary_polyline),
-        polylineLength:
-          (a.map?.polyline ?? a.map?.summary_polyline)?.length ?? 0,
-        startLatlng: a.start_latlng,
-        endLatlng: a.end_latlng,
-      })),
-    );
-
     // Debug: Log some projected coordinates
     if (projectedActivities.length > 0) {
       // Calculate bounds of projected coordinates
