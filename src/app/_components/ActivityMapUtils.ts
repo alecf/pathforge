@@ -21,7 +21,7 @@ export interface ProjectedPoint {
   z: number;
   lat: number;
   lng: number;
-  altitude: number;
+  altitude?: number;
 }
 
 export interface ProjectedActivity {
@@ -47,7 +47,7 @@ export interface ActivityWithStreams extends DetailedActivityResponse {
   detailedPoints?: Array<{
     lng: number;
     lat: number;
-    altitude: number;
+    altitude?: number;
     lnglat_resolution: string;
     altitude_resolution: string;
   }>;
@@ -244,35 +244,37 @@ export function projectActivities(
         map: { polyline?: string; summary_polyline?: string };
       } => Boolean(activity.map?.polyline ?? activity.map?.summary_polyline),
     )
-    .map((activity, index) => {
+    .map((activity, index): ProjectedActivity | null => {
       const routeData = getActivityRouteData(activity);
 
       if (routeData.length === 0) {
         return null;
       }
 
-      const projectedPoints = routeData.map((point) => {
-        const projected = projection([point.lng, point.lat]);
-        const [x, y] = projected ?? [0, 0];
+      const projectedPoints: ProjectedPoint[] = routeData.map(
+        (point): ProjectedPoint => {
+          const projected = projection([point.lng, point.lat]);
+          const [x, y] = projected ?? [0, 0];
 
-        // Project altitude to z coordinate
-        let z = 0;
-        if (hasAltitudeData && point.altitude !== undefined) {
-          // Use actual altitude data from detailed activity
-          z =
-            ((point.altitude - minAltitude) / (maxAltitude - minAltitude)) *
-            100;
-        }
+          // Project altitude to z coordinate
+          let z = 0;
+          if (hasAltitudeData && point.altitude !== undefined) {
+            // Use actual altitude data from detailed activity
+            z =
+              ((point.altitude - minAltitude) / (maxAltitude - minAltitude)) *
+              100;
+          }
 
-        return {
-          x,
-          y,
-          z,
-          lat: point.lat,
-          lng: point.lng,
-          altitude: point.altitude ?? 0,
-        };
-      });
+          return {
+            x,
+            y,
+            z,
+            lat: point.lat,
+            lng: point.lng,
+            altitude: point.altitude,
+          };
+        },
+      );
 
       return {
         id: activity.id,
@@ -305,7 +307,7 @@ export function mergeStreamsData(
   return latlngStream.map(([lat, lng], index) => ({
     lng,
     lat,
-    altitude: altitudeStream?.[index] ?? 0,
+    altitude: altitudeStream?.[index],
     lnglat_resolution: lnglatResolution ?? "unknown",
     altitude_resolution: altitudeResolution ?? "unknown",
   }));

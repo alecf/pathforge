@@ -400,12 +400,21 @@ export function Activity3DMap({
     method: "mls" | "interpolation" | "delaunay",
   ) => {
     if (projectedActivities.length === 0) return;
+    // Exclude activities without any altitude samples to avoid contaminating terrain
+    const activitiesWithAltitude = projectedActivities.filter((a) =>
+      a.points.some((p) => p.altitude !== undefined),
+    );
+    if (activitiesWithAltitude.length === 0) {
+      setDensePoints([]);
+      setShowDenseTerrain(false);
+      return;
+    }
     setIsDensifying(true);
     try {
       const t0 =
         typeof performance !== "undefined" ? performance.now() : Date.now();
       console.log(`🚀 Starting terrain densification using ${method}...`);
-      const result = await densify(projectedActivities, {
+      const result = await densify(activitiesWithAltitude, {
         method,
         density: 8,
         debug: true,
