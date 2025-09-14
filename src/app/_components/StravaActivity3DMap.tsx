@@ -83,6 +83,7 @@ function ActivityLine({
   sampleZAt,
   snapOffset = 0.2,
 }: ActivityLineProps) {
+  const { camera } = useThree();
   const points = useMemo(() => {
     return activity.points.map((point) => {
       // Optionally snap to surface height using sampler
@@ -114,13 +115,29 @@ function ActivityLine({
     snapOffset,
   ]);
 
+  // Distance-aware width: shrink when far, slightly larger when near
+  const dynamicWidth = useMemo(() => {
+    if (points.length < 2) return 2;
+    const a = points[0];
+    const b = points[Math.max(0, points.length - 1)];
+    const mid = new Vector3(
+      ((a?.[0] ?? 0) + (b?.[0] ?? 0)) / 2,
+      ((a?.[1] ?? 0) + (b?.[1] ?? 0)) / 2,
+      ((a?.[2] ?? 0) + (b?.[2] ?? 0)) / 2,
+    );
+    const dist = camera?.position.distanceTo(mid) ?? 500;
+    // Map distance to width: closer => ~3, far => ~0.6 (screen-space relative)
+    const w = Math.max(0.6, Math.min(3, 150 / Math.max(50, dist)));
+    return w;
+  }, [points, camera]);
+
   if (points.length < 2) return null;
 
   return (
     <Line
       points={points}
       color={activity.color}
-      lineWidth={3}
+      lineWidth={dynamicWidth}
       frustumCulled={false}
     />
   );

@@ -104,6 +104,7 @@ export function DenseTerrainSurface({
   bounds,
   resolution = 50,
   color = "#4ade80",
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   opacity = 0.3,
   highlightRadius = 5,
   segmentIndex,
@@ -182,7 +183,7 @@ export function DenseTerrainSurface({
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
 
-    // Build subtle vertex colors using altitude and local slope (from normals)
+    // Build subtle vertex colors using altitude and very gentle slope contrast (from normals)
     let normalsAttr = geometry.getAttribute("normal");
     if (!normalsAttr) {
       geometry.computeVertexNormals();
@@ -200,14 +201,14 @@ export function DenseTerrainSurface({
       const ny = Math.max(0, Math.min(1, normals.getY(i)));
       const slope = 1 - ny; // 0 flat, 1 vertical
 
-      // Gentle adjustments: a touch lighter with altitude, slightly darker with slope
+      // Much gentler shading: minimal darkening on steep slopes
       const lightness = Math.max(
         0,
-        Math.min(1, baseHSL.l * 0.85 + tAlt * 0.15 - slope * 0.1),
+        Math.min(1, baseHSL.l * 0.92 + tAlt * 0.12 - slope * 0.04),
       );
       const saturation = Math.max(
         0,
-        Math.min(1, baseHSL.s * 0.95 + slope * 0.12),
+        Math.min(1, baseHSL.s * 0.98 + slope * 0.06),
       );
       // Combine subtle shading with trail color by lerping towards existing trail-mixed color
       const shaded = new Color().setHSL(baseHSL.h, saturation, lightness);
@@ -243,9 +244,9 @@ export function DenseTerrainSurface({
   return (
     <mesh geometry={surfaceGeometry}>
       <meshStandardMaterial
-        color={color}
-        transparent={true}
-        opacity={opacity}
+        color="#ffffff"
+        transparent={false}
+        opacity={1}
         side={2} // DoubleSide
         vertexColors
         roughness={0.95}
@@ -269,6 +270,7 @@ interface AdaptiveTerrainSurfaceProps {
 export function AdaptiveTerrainSurface({
   densePoints,
   color = "#4ade80",
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   opacity = 0.35,
   maxEdgeLength,
   mapBounds,
@@ -420,25 +422,16 @@ export function AdaptiveTerrainSurface({
     const denom = Math.max(1e-6, maxZ - minZ);
 
     // Optional trail proximity coloring
-    const trailColor = new Color("#A0522D"); // sienna (lighter dirt tone)
-    const trailColors: number[] | undefined = new Array(
-      augmentedPoints.length * 3,
-    ).fill(0);
-    if (trailColors) {
-      // For each vertex, check shortest distance to any segment (cheap O(N*M) for moderate sizes)
-      // Make highlight radius much narrower (~10% of prior)
-      const r = (maxEdgeLength ?? Math.sqrt(denom) + 1) * 0.075;
-      for (let i = 0; i < augmentedPoints.length; i++) {
-        const vx = augmentedPoints[i]!.x;
-        const vy = augmentedPoints[i]!.y;
-        const onTrail = isPointNearAnySegment(segmentIndex, vx, vy, r);
-        const idx3 = i * 3;
-        const baseCol = new Color(color);
-        const mix = baseCol.clone().lerp(trailColor, onTrail ? 1 : 0);
-        trailColors[idx3] = mix.r;
-        trailColors[idx3 + 1] = mix.g;
-        trailColors[idx3 + 2] = mix.b;
-      }
+    const trailColor = new Color("#8B4513"); // brown
+    const onTrailMask: boolean[] = new Array(augmentedPoints.length).fill(
+      false,
+    );
+    // Widen trail radius noticeably so trails read clearly from a distance
+    const rTrail = Math.max(1e-3, (maxEdgeLength ?? maxEdge) * 0.11);
+    for (let i = 0; i < augmentedPoints.length; i++) {
+      const vx = augmentedPoints[i]!.x;
+      const vy = augmentedPoints[i]!.y;
+      onTrailMask[i] = isPointNearAnySegment(segmentIndex, vx, vy, rTrail);
     }
 
     for (let i = 0; i < augmentedPoints.length; i++) {
@@ -446,26 +439,23 @@ export function AdaptiveTerrainSurface({
       const tAlt = Math.min(1, Math.max(0, (p.z - minZ) / denom));
       const ny = Math.max(0, Math.min(1, normals.getY(i)));
       const slope = 1 - ny;
+      // Much gentler shading: minimal darkening on steep slopes
       const lightness = Math.max(
         0,
-        Math.min(1, baseHSL.l * 0.85 + tAlt * 0.15 - slope * 0.1),
+        Math.min(1, baseHSL.l * 0.92 + tAlt * 0.12 - slope * 0.04),
       );
       const saturation = Math.max(
         0,
-        Math.min(1, baseHSL.s * 0.95 + slope * 0.12),
+        Math.min(1, baseHSL.s * 0.98 + slope * 0.06),
       );
       const shaded = new Color().setHSL(baseHSL.h, saturation, lightness);
       // component offset into flat RGB array (r,g,b per vertex)
       const idx3 = i * 3;
-      if (trailColors) {
-        const r = trailColors[idx3] ?? 0;
-        const g = trailColors[idx3 + 1] ?? 0;
-        const b = trailColors[idx3 + 2] ?? 0;
-        const c = new Color(r, g, b);
-        const finalCol = shaded.clone().lerp(c, 0.6);
-        colorArray[idx3] = finalCol.r;
-        colorArray[idx3 + 1] = finalCol.g;
-        colorArray[idx3 + 2] = finalCol.b;
+      if (onTrailMask[i]) {
+        // Draw trails as pure brown, no blending with base color
+        colorArray[idx3] = trailColor.r;
+        colorArray[idx3 + 1] = trailColor.g;
+        colorArray[idx3 + 2] = trailColor.b;
       } else {
         colorArray[idx3] = shaded.r;
         colorArray[idx3 + 1] = shaded.g;
@@ -488,9 +478,9 @@ export function AdaptiveTerrainSurface({
   return (
     <mesh geometry={geometry}>
       <meshStandardMaterial
-        color={color}
-        transparent={true}
-        opacity={opacity}
+        color="#ffffff"
+        transparent={false}
+        opacity={1}
         side={2}
         vertexColors
         roughness={0.95}
