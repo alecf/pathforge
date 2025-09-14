@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { type DetailedActivityResponse } from "strava-v3";
 import { useActivities, type ActivityWithStreams } from "./ActivityMapUtils";
 
@@ -63,6 +65,29 @@ export function Dashboard() {
   const { activities, isLoading, error, detailErrors, isLoadingDetails } =
     useActivities(activityParams);
 
+  const lastToastKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (detailErrors.length === 0) return;
+    const messages = detailErrors.map((e) =>
+      e instanceof Error ? e.message : String(e),
+    );
+    const key = messages.join("|");
+    if (lastToastKeyRef.current === key) return;
+    lastToastKeyRef.current = key;
+
+    toast("Some activity details failed to load", {
+      description: (
+        <ul className="list-disc pl-5 text-gray-800">
+          {messages.map((m, idx) => (
+            <li key={idx} className="truncate">
+              {m}
+            </li>
+          ))}
+        </ul>
+      ),
+    });
+  }, [detailErrors]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -103,11 +128,7 @@ export function Dashboard() {
         </div>
       )}
 
-      {detailErrors.length > 0 && (
-        <div className="mb-4 rounded bg-yellow-50 p-3 text-sm text-yellow-700">
-          Some activity details failed to load ({detailErrors.length} errors)
-        </div>
-      )}
+      {/* Errors are surfaced via Sonner toasts */}
 
       <div className="grid gap-4">
         {activities?.map((activity) => (

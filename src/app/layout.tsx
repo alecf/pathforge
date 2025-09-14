@@ -4,6 +4,7 @@ import { type Metadata } from "next";
 import { SessionProvider } from "next-auth/react";
 import { Geist } from "next/font/google";
 
+import { Toaster } from "~/components/ui/sonner";
 import { TRPCReactProvider } from "~/trpc/react";
 import { AppHeader } from "./_components/AppHeader";
 
@@ -30,6 +31,7 @@ export default function RootLayout({
               <AppHeader />
               <main className="flex flex-1 overflow-y-auto">{children}</main>
             </div>
+            <Toaster />
           </TRPCReactProvider>
         </SessionProvider>
       </body>
