@@ -39,6 +39,13 @@ interface ActivityLinesProps {
   };
   sampleZAt?: (x: number, y: number) => number | undefined;
   snapOffset?: number;
+  hoveredId?: string | null;
+  onHoverChange?: (id: string | null) => void;
+  onLineClick?: (
+    activity: ProjectedActivity,
+    clientX: number,
+    clientY: number,
+  ) => void;
 }
 
 function ActivityLines({
@@ -46,6 +53,9 @@ function ActivityLines({
   altitudeBounds,
   sampleZAt,
   snapOffset = 0.2,
+  hoveredId,
+  onHoverChange,
+  onLineClick,
 }: ActivityLinesProps) {
   const { minAltitude, maxAltitude, hasAltitudeData } = altitudeBounds;
 
@@ -60,6 +70,9 @@ function ActivityLines({
           hasAltitudeData={hasAltitudeData}
           sampleZAt={sampleZAt}
           snapOffset={snapOffset}
+          isHovered={hoveredId === activity.id}
+          onHoverChange={onHoverChange}
+          onLineClick={onLineClick}
         />
       ))}
     </>
@@ -73,6 +86,13 @@ interface ActivityLineProps {
   hasAltitudeData: boolean;
   sampleZAt?: (x: number, y: number) => number | undefined;
   snapOffset?: number;
+  isHovered?: boolean;
+  onHoverChange?: (id: string | null) => void;
+  onLineClick?: (
+    activity: ProjectedActivity,
+    clientX: number,
+    clientY: number,
+  ) => void;
 }
 
 function ActivityLine({
@@ -82,8 +102,11 @@ function ActivityLine({
   hasAltitudeData,
   sampleZAt,
   snapOffset = 0.2,
+  isHovered = false,
+  onHoverChange,
+  onLineClick,
 }: ActivityLineProps) {
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
   const points = useMemo(() => {
     return activity.points.map((point) => {
       // Optionally snap to surface height using sampler
@@ -137,8 +160,24 @@ function ActivityLine({
     <Line
       points={points}
       color={activity.color}
-      lineWidth={dynamicWidth}
+      lineWidth={isHovered ? dynamicWidth * 2.2 : dynamicWidth}
       frustumCulled={false}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        if (onHoverChange) onHoverChange(activity.id);
+        if (gl?.domElement) gl.domElement.style.cursor = "pointer";
+      }}
+      onPointerOut={(e) => {
+        e.stopPropagation();
+        if (onHoverChange) onHoverChange(null);
+        if (gl?.domElement) gl.domElement.style.cursor = "auto";
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        const clientX = (e?.event as MouseEvent)?.clientX ?? 0;
+        const clientY = (e?.event as MouseEvent)?.clientY ?? 0;
+        if (onLineClick) onLineClick(activity, clientX, clientY);
+      }}
     />
   );
 }
@@ -272,6 +311,7 @@ export function Activity3DMap({
   height,
 }: Activity3DMapProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [densePoints, setDensePoints] = useState<DensePoint[]>([]);
   const [isDensifying, setIsDensifying] = useState(false);
   const [showDenseTerrain, setShowDenseTerrain] = useState(false);
@@ -280,6 +320,10 @@ export function Activity3DMap({
   const [selectedMethod, setSelectedMethod] = useState<
     "mls" | "interpolation" | "delaunay"
   >("mls");
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [card, setCard] = useState<{ id: string; x: number; y: number } | null>(
+    null,
+  );
   // Cache terrain per selection of activities and method
   const [cacheBySelection, setCacheBySelection] = useState<
     Record<
@@ -296,6 +340,17 @@ export function Activity3DMap({
     width,
     height,
   });
+
+  const idToDistance = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of activities) {
+      const id = a?.id?.toString?.();
+      if (!id) continue;
+      const d = (a as DetailedActivityResponse).distance;
+      if (typeof d === "number") m.set(id, d);
+    }
+    return m;
+  }, [activities]);
 
   // Memoized spatial indices for current visible activities
   const { segmentIndex } = useMemo(() => {
@@ -476,7 +531,10 @@ export function Activity3DMap({
   }, [selectionKey]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-lg bg-gray-900">
+    <div
+      ref={containerRef}
+      className="relative h-full w-full overflow-hidden rounded-lg bg-gray-900"
+    >
       {/* Help text overlay */}
       <div className="absolute top-4 left-4 z-10 rounded bg-black/50 p-2 text-xs text-white">
         <div>Mouse: Rotate view</div>
@@ -582,6 +640,7 @@ export function Activity3DMap({
         }}
         gl={{ logarithmicDepthBuffer: true, antialias: true }}
         style={{ width, height }}
+        onPointerMissed={() => setCard(null)}
       >
         {/* Lighting */}
         <ambientLight intensity={0.4} />
@@ -600,6 +659,14 @@ export function Activity3DMap({
           projectedActivities={projectedActivities}
           altitudeBounds={altitudeBounds}
           sampleZAt={snapLines ? sampleZAt : undefined}
+          hoveredId={hoveredId}
+          onHoverChange={setHoveredId}
+          onLineClick={(act, clientX, clientY) => {
+            const rect = containerRef.current?.getBoundingClientRect();
+            const relX = rect ? clientX - rect.left : clientX;
+            const relY = rect ? clientY - rect.top : clientY;
+            setCard({ id: act.id, x: relX, y: relY });
+          }}
         />
 
         {/* Dense terrain */}
@@ -654,6 +721,29 @@ export function Activity3DMap({
           autoClip={true}
         />
       </Canvas>
+
+      {card && (
+        <div
+          className="absolute z-20 max-w-xs rounded-md border bg-white p-3 text-sm shadow-md"
+          style={{
+            left: Math.max(8, card.x + 12),
+            top: Math.max(8, card.y + 12),
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="font-medium text-gray-900">
+            {projectedActivities.find((a) => a.id === card.id)?.name ?? "Ride"}
+          </div>
+          <div className="mt-1 text-gray-600">
+            {(() => {
+              const meters = idToDistance.get(card.id);
+              if (typeof meters !== "number") return "Distance unknown";
+              const km = meters / 1000;
+              return `${km.toFixed(1)} km`;
+            })()}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
