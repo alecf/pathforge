@@ -58,6 +58,7 @@ export const stravaRouter = createTRPCRouter({
         const strava = createStravaClient(accessToken);
 
         // Call the Strava API with the provided arguments
+        console.log("listing activities with input", input);
         const activities = await strava.athlete.listActivities(input ?? {});
 
         return activities as DetailedActivityResponse[];
@@ -209,3 +210,5 @@ function createStravaClient(accessToken: string): Strava {
     stravaApi as unknown as { client: new (token: string) => Strava }
   ).client(accessToken);
 }
+
+export type SportType = DetailedActivityResponse["sport_type"];
