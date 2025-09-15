@@ -20,7 +20,12 @@ export interface StravaActivityStream {
   data: (number | number[])[];
 }
 
-type StravaActivityStreams = StravaActivityStream[];
+// When key_by_type=true, Strava returns an object keyed by stream type
+export type StravaStreamsByType = {
+  [key: string]: StravaActivityStream | undefined;
+  latlng?: StravaActivityStream;
+  altitude?: StravaActivityStream;
+};
 
 export const stravaRouter = createTRPCRouter({
   athlete: createTRPCRouter({
@@ -119,7 +124,8 @@ export const stravaRouter = createTRPCRouter({
             key_by_type: input.key_by_type,
           });
 
-          return streams as StravaActivityStreams;
+          // We always request key_by_type from the client; return a keyed object
+          return streams as unknown as StravaStreamsByType;
         } catch (error) {
           console.error("Error fetching activity streams:", error);
           throw error;

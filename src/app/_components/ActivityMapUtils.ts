@@ -2,7 +2,10 @@ import polyline from "@mapbox/polyline";
 import * as d3 from "d3";
 import { useMemo } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
-import type { StravaActivityStream } from "~/server/api/routers/strava";
+import type {
+  StravaActivityStream,
+  StravaStreamsByType,
+} from "~/server/api/routers/strava";
 import { api } from "~/trpc/react";
 import { useStable } from "~/util/useStable";
 
@@ -53,6 +56,32 @@ export interface ActivityWithStreams extends DetailedActivityResponse {
   }>;
 }
 
+// Always use keyed-by-type response
+function isStreamMap(value: unknown): value is StravaStreamsByType {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isLatLngStream(
+  stream: StravaActivityStream | undefined,
+): stream is LatLngStream {
+  if (!stream || stream.type !== "latlng") return false;
+  const data = stream.data;
+  if (!Array.isArray(data)) return false;
+  if (data.length === 0) return true;
+  const first = data[0];
+  return Array.isArray(first) && first.length >= 2;
+}
+
+function isAltitudeStream(
+  stream: StravaActivityStream | undefined,
+): stream is AltitudeStream {
+  if (!stream || stream.type !== "altitude") return false;
+  const data = stream.data;
+  if (!Array.isArray(data)) return false;
+  if (data.length === 0) return true;
+  return typeof data[0] === "number";
+}
+
 /**
  * Decode Google's polyline format to array of lat/lng/altitude points
  * @param encoded Encoded polyline string from Strava
@@ -89,7 +118,11 @@ export function getActivityRouteData(
   activity: DetailedActivityResponse | ActivityWithStreams,
 ) {
   // First try to use streams data if available (most accurate)
-  if ("detailedPoints" in activity && activity.detailedPoints) {
+  if (
+    "detailedPoints" in activity &&
+    Array.isArray(activity.detailedPoints) &&
+    activity.detailedPoints.length > 0
+  ) {
     return activity.detailedPoints.map((point) => ({
       lat: point.lat,
       lng: point.lng,
@@ -237,13 +270,6 @@ export function projectActivities(
   }
 
   return activities
-    .filter(
-      (
-        activity,
-      ): activity is DetailedActivityResponse & {
-        map: { polyline?: string; summary_polyline?: string };
-      } => Boolean(activity.map?.polyline ?? activity.map?.summary_polyline),
-    )
     .map((activity, index): ProjectedActivity | null => {
       const routeData = getActivityRouteData(activity);
 
@@ -260,9 +286,8 @@ export function projectActivities(
           let z = 0;
           if (hasAltitudeData && point.altitude !== undefined) {
             // Use actual altitude data from detailed activity
-            z =
-              ((point.altitude - minAltitude) / (maxAltitude - minAltitude)) *
-              100;
+            const altitudeRange = Math.max(1e-6, maxAltitude - minAltitude);
+            z = ((point.altitude - minAltitude) / altitudeRange) * 100;
           }
 
           return {
@@ -299,7 +324,13 @@ export function mergeStreamsData(
   altitudeStream?: number[],
   lnglatResolution?: string,
   altitudeResolution?: string,
-): ActivityWithStreams["detailedPoints"] {
+): Array<{
+  lng: number;
+  lat: number;
+  altitude?: number;
+  lnglat_resolution: string;
+  altitude_resolution: string;
+}> {
   if (!latlngStream || latlngStream.length === 0) {
     return [];
   }
@@ -337,53 +368,53 @@ export function useDetailedActivitiesWithStreams(activityIds: string[]) {
     ),
   );
 
-  // Extract data and loading states
-  const activities = useMemo(
-    () =>
-      activityQueries
-        .map((q) => q.data)
-        .filter((data): data is DetailedActivityResponse => data !== undefined),
-    [activityQueries],
-  );
+  // Merge activities with their streams data by index (aligned with activityIds)
+  const activitiesWithStreams = useMemo(() => {
+    const merged: ActivityWithStreams[] = [];
 
-  const streamsData = useMemo(
-    () =>
-      streamsQueries.map((q) => q.data).filter((data) => data !== undefined),
-    [streamsQueries],
-  );
+    activityQueries.forEach((activityQuery, index) => {
+      const activity = activityQuery.data;
+      if (!activity) return;
 
-  // Merge activities with their streams data
-  const activitiesWithStreams = useMemo(
-    () =>
-      activities.map((activity, index) => {
-        const streams = streamsData[index];
-        if (!streams) return activity;
+      const streams = streamsQueries[index]?.data;
 
-        // Handle the actual streams response structure - it's an array of StravaActivityStream objects
-        const streamsArray = streams;
+      // Support keyed-by-type responses
+      let latlngData: Array<[number, number]> | undefined;
+      let altitudeData: number[] | undefined;
+      let latlngRes: string | undefined;
+      let altitudeRes: string | undefined;
 
-        // Find the latlng and altitude streams
-        const latlngStream = streamsArray.find(
-          (stream) => stream.type === "latlng",
-        );
-        const altitudeStream = streamsArray.find(
-          (stream) => stream.type === "altitude",
-        );
+      if (isStreamMap(streams)) {
+        const latlng = streams.latlng;
+        const altitude = streams.altitude;
+        if (isLatLngStream(latlng)) {
+          latlngData = latlng.data;
+          latlngRes = latlng.resolution;
+        }
+        if (isAltitudeStream(altitude)) {
+          altitudeData = altitude.data;
+          altitudeRes = altitude.resolution;
+        }
+      }
 
-        const detailedPoints = mergeStreamsData(
-          latlngStream?.data as Array<[number, number]>,
-          altitudeStream?.data as number[],
-          latlngStream?.resolution,
-          altitudeStream?.resolution,
-        );
+      const detailedPoints = mergeStreamsData(
+        latlngData,
+        altitudeData,
+        latlngRes,
+        altitudeRes,
+      );
 
-        return {
-          ...activity,
-          detailedPoints,
-        } as ActivityWithStreams;
-      }),
-    [activities, streamsData],
-  );
+      if (detailedPoints.length > 0) {
+        merged.push({ ...activity, detailedPoints });
+      } else {
+        // If there are no stream points, omit detailedPoints so callers can
+        // fall back to polyline data for rendering
+        merged.push(activity);
+      }
+    });
+
+    return merged;
+  }, [activityQueries, streamsQueries]);
 
   const isLoading =
     activityQueries.some((q) => q.isLoading) ||

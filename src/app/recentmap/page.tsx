@@ -14,8 +14,14 @@ const activityParams = {
   per_page: 10,
 };
 export default function RecentMapPage() {
-  const { activities, isLoading, error, detailErrors, isLoadingDetails } =
-    useActivities(activityParams);
+  const {
+    activities,
+    isLoading,
+    error,
+    detailErrors,
+    isLoadingDetails,
+    isLoadingBasic,
+  } = useActivities(activityParams);
 
   const [filteredActivities, setFilteredActivities] = useState<
     (DetailedActivityResponse | ActivityWithStreams)[]
@@ -97,7 +103,7 @@ export default function RecentMapPage() {
         )}
       </div>
       <div className="relative flex-1">
-        {isLoading && (
+        {isLoadingBasic && (
           <div className="absolute top-4 right-4 z-10 rounded bg-blue-50 p-3 text-sm text-blue-700">
             Loading activities...
           </div>

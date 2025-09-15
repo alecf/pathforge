@@ -76,7 +76,11 @@ export function getActivityRouteData(
   activity: DetailedActivityResponse | ActivityWithStreams,
 ) {
   // First try to use streams data if available (most accurate)
-  if ("detailedPoints" in activity && activity.detailedPoints) {
+  if (
+    "detailedPoints" in activity &&
+    Array.isArray(activity.detailedPoints) &&
+    activity.detailedPoints.length > 0
+  ) {
     return activity.detailedPoints.map((point) => ({
       lat: point.lat,
       lng: point.lng,
