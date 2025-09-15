@@ -115,18 +115,34 @@ export const stravaRouter = createTRPCRouter({
         const strava = createStravaClient(accessToken);
 
         try {
-          // Call the Strava API to get activity streams
+          // The strava-v3 client expects 'types' as a comma-separated string
+          const types = (input.keys ?? ["latlng", "altitude"]).join(",");
           const streams = await strava.streams.activity({
             id: input.id,
-            types: input.keys,
-            keys: input.keys?.join(","),
+            types,
+            key_by_type: true,
             resolution: input.resolution ?? "medium",
-            key_by_type: input.key_by_type,
           });
 
-          // We always request key_by_type from the client; return a keyed object
-          return streams as unknown as StravaStreamsByType;
+          return streams as StravaActivityStream[];
         } catch (error) {
+          // Treat 404 on streams as "no streams available" (e.g., manual activity)
+          const statusCode = (error as { statusCode?: number }).statusCode;
+          const message = (error as { message?: string }).message ?? "";
+          const rawErr = (error as { error?: unknown }).error;
+          const errorStr =
+            typeof rawErr === "string"
+              ? rawErr
+              : rawErr && typeof rawErr === "object"
+                ? JSON.stringify(rawErr)
+                : "";
+          if (
+            statusCode === 404 ||
+            message.includes("Resource Not Found") ||
+            errorStr.includes("Resource Not Found")
+          ) {
+            return [] as StravaActivityStream[];
+          }
           console.error("Error fetching activity streams:", error);
           throw error;
         }

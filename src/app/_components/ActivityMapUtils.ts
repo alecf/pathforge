@@ -2,10 +2,7 @@ import polyline from "@mapbox/polyline";
 import * as d3 from "d3";
 import { useMemo } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
-import type {
-  StravaActivityStream,
-  StravaStreamsByType,
-} from "~/server/api/routers/strava";
+import type { StravaActivityStream } from "~/server/api/routers/strava";
 import { api } from "~/trpc/react";
 import { useStable } from "~/util/useStable";
 
@@ -56,10 +53,7 @@ export interface ActivityWithStreams extends DetailedActivityResponse {
   }>;
 }
 
-// Always use keyed-by-type response
-function isStreamMap(value: unknown): value is StravaStreamsByType {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
+// No keyed-by-type parsing; router returns arrays
 
 function isLatLngStream(
   stream: StravaActivityStream | undefined,
@@ -378,23 +372,39 @@ export function useDetailedActivitiesWithStreams(activityIds: string[]) {
 
       const streams = streamsQueries[index]?.data;
 
-      // Support keyed-by-type responses
+      // Streams come back as an array; find by type
       let latlngData: Array<[number, number]> | undefined;
       let altitudeData: number[] | undefined;
       let latlngRes: string | undefined;
       let altitudeRes: string | undefined;
 
-      if (isStreamMap(streams)) {
-        const latlng = streams.latlng;
-        const altitude = streams.altitude;
+      if (Array.isArray(streams)) {
+        const latlng = streams.find((s) => s && s.type === "latlng");
+        const altitude = streams.find((s) => s && s.type === "altitude");
         if (isLatLngStream(latlng)) {
           latlngData = latlng.data;
           latlngRes = latlng.resolution;
+        } else {
+          console.error(
+            "LatLng stream is not an array: ",
+            activity.name,
+            latlng,
+            streams,
+          );
         }
         if (isAltitudeStream(altitude)) {
           altitudeData = altitude.data;
           altitudeRes = altitude.resolution;
+        } else {
+          console.error(
+            "Altitude stream is not an array: ",
+            activity.name,
+            altitude,
+            streams,
+          );
         }
+      } else {
+        console.error("Streams are not an array: ", activity.name, streams);
       }
 
       const detailedPoints = mergeStreamsData(
