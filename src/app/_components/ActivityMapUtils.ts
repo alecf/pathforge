@@ -515,6 +515,90 @@ export function useActivities(options?: {
 }
 
 /**
+ * Fetch multiple pages of activities and merge them with detailed streams data.
+ */
+export function useActivitiesPages(options: {
+  per_page: number;
+  pageCount: number;
+  before?: number;
+  after?: number;
+}) {
+  const { per_page, pageCount, before, after } = options;
+
+  // Fetch basic activities for each page in parallel
+  const pageNumbers = useMemo(
+    () => Array.from({ length: Math.max(1, pageCount) }, (_, i) => i + 1),
+    [pageCount],
+  );
+
+  const pageQueries = useStable(
+    api.useQueries((t) =>
+      pageNumbers.map((page) =>
+        t.strava.athlete.listActivities({ per_page, page, before, after }),
+      ),
+    ),
+  );
+
+  const isLoadingBasic = pageQueries.some((q) => q.isLoading);
+  const basicError = pageQueries.find((q) => q.error)?.error ?? null;
+
+  // Flatten activities in page order
+  const basicActivities = useMemo(
+    () =>
+      pageQueries
+        .map((q) => q.data ?? EMPTY_ARRAY)
+        .flat()
+        // Deduplicate by id in case of overlaps
+        .filter(
+          (activity, index, arr) =>
+            arr.findIndex((a) => a.id === activity.id) === index,
+        ),
+    [pageQueries],
+  );
+
+  // Fetch detailed streams for aggregated activities
+  const activityIds = useMemo(
+    () => getActivityIds(basicActivities ?? EMPTY_ARRAY),
+    [basicActivities],
+  );
+  const {
+    activities: detailedActivities,
+    isLoading: isLoadingDetails,
+    errors: detailErrors,
+  } = useDetailedActivitiesWithStreams(activityIds);
+
+  const detailedActivitiesMap = useMemo(
+    () =>
+      new Map(
+        detailedActivities.map((activity) => [
+          activity.id.toString(),
+          activity,
+        ]),
+      ),
+    [detailedActivities],
+  );
+
+  const unifiedActivities = useMemo(
+    () =>
+      (basicActivities ?? EMPTY_ARRAY).map(
+        (basicActivity) =>
+          detailedActivitiesMap.get(basicActivity.id.toString()) ??
+          basicActivity,
+      ),
+    [basicActivities, detailedActivitiesMap],
+  );
+
+  return {
+    activities: unifiedActivities,
+    isLoading: isLoadingBasic || isLoadingDetails,
+    error: basicError,
+    detailErrors,
+    isLoadingBasic,
+    isLoadingDetails,
+  };
+}
+
+/**
  * Helper function to extract activity IDs from basic activity data
  */
 export function getActivityIds(

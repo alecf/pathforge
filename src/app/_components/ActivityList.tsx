@@ -2,13 +2,7 @@
 
 import { useState } from "react";
 import { type DetailedActivityResponse } from "strava-v3";
-import { decodePolyline } from "./ActivityMapUtils";
-
-// Helper function to get the number of points in a polyline
-function getPolylinePointCount(polyline: string | undefined): number {
-  if (!polyline) return 0;
-  return decodePolyline(polyline).length;
-}
+import { sportTypeTitles } from "~/types/sportTypeTitles";
 
 // Helper function to convert meters to miles
 function metersToMiles(meters: number): number {
@@ -18,11 +12,15 @@ function metersToMiles(meters: number): number {
 interface ActivityListProps {
   activities: DetailedActivityResponse[];
   onFilterChange: (filteredActivities: DetailedActivityResponse[]) => void;
+  onLoadMore?: () => void;
+  isLoadingMore?: boolean;
 }
 
 export function ActivityList({
   activities,
   onFilterChange,
+  onLoadMore,
+  isLoadingMore,
 }: ActivityListProps) {
   const [selectedActivities, setSelectedActivities] = useState<Set<string>>(
     new Set(activities.map((a) => a.id.toString())),
@@ -80,8 +78,6 @@ export function ActivityList({
           const hasMap = !!(
             activity.map?.polyline ?? activity.map?.summary_polyline
           );
-          const startLocation = activity.start_latlng;
-          const endLocation = activity.end_latlng;
 
           return (
             <div
@@ -120,33 +116,12 @@ export function ActivityList({
                     )}
                   </div>
                   <p className="text-sm text-gray-600">
-                    {activity.sport_type} •{" "}
+                    {sportTypeTitles[activity.sport_type]} •{" "}
                     {new Date(activity.start_date).toLocaleDateString()}
                   </p>
-                  {startLocation && (
-                    <p className="text-xs text-gray-500">
-                      Start: {startLocation[0]?.toFixed(4)},{" "}
-                      {startLocation[1]?.toFixed(4)}
-                    </p>
-                  )}
-                  {endLocation && (
-                    <p className="text-xs text-gray-500">
-                      End: {endLocation[0]?.toFixed(4)},{" "}
-                      {endLocation[1]?.toFixed(4)}
-                    </p>
-                  )}
-                  {hasMap && (
+                  {activity.distance !== undefined && (
                     <p className="text-xs text-green-600">
-                      Route:{" "}
-                      {getPolylinePointCount(
-                        activity.map?.polyline ??
-                          activity.map?.summary_polyline,
-                      )}{" "}
-                      points •{" "}
-                      {activity.distance
-                        ? metersToMiles(activity.distance).toFixed(2)
-                        : "0"}{" "}
-                      mi
+                      {metersToMiles(activity.distance).toFixed(2)} mi
                     </p>
                   )}
                 </div>
@@ -156,8 +131,24 @@ export function ActivityList({
         })}
       </div>
 
-      <div className="mt-4 flex-shrink-0 text-sm text-gray-600">
-        {selectedActivities.size} of {activities.length} activities selected
+      <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+        <div>
+          {selectedActivities.size} of {activities.length} activities selected
+        </div>
+        <div className="flex items-center gap-2">
+          <span>
+            {activities.length} of {activities.length} activities
+          </span>
+          {onLoadMore && (
+            <button
+              onClick={onLoadMore}
+              disabled={isLoadingMore}
+              className="rounded bg-gray-100 px-3 py-1 text-sm text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+            >
+              {isLoadingMore ? "Loading…" : "Load more"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

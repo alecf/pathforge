@@ -6,14 +6,14 @@ import { type DetailedActivityResponse } from "strava-v3";
 import { ActivityList } from "../_components/ActivityList";
 import { ActivityMapTabs } from "../_components/ActivityMapTabs";
 import {
-  useActivities,
+  useActivitiesPages,
   type ActivityWithStreams,
 } from "../_components/ActivityMapUtils";
 
-const activityParams = {
-  per_page: 10,
-};
+const PER_PAGE = 10 as const;
 export default function RecentMapPage() {
+  const [pages, setPages] = useState(1);
+
   const {
     activities,
     isLoading,
@@ -21,7 +21,7 @@ export default function RecentMapPage() {
     detailErrors,
     isLoadingDetails,
     isLoadingBasic,
-  } = useActivities(activityParams);
+  } = useActivitiesPages({ per_page: PER_PAGE, pageCount: pages });
 
   const [filteredActivities, setFilteredActivities] = useState<
     (DetailedActivityResponse | ActivityWithStreams)[]
@@ -73,6 +73,8 @@ export default function RecentMapPage() {
             key={`list-${activities.length}`}
             activities={activities}
             onFilterChange={setFilteredActivities}
+            onLoadMore={() => setPages((p) => p + 1)}
+            isLoadingMore={isLoadingBasic}
           />
         ) : (
           <div className="flex h-full flex-col rounded-lg border border-gray-200 bg-white p-4 shadow-sm">

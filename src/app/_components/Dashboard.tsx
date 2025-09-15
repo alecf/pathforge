@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { type DetailedActivityResponse } from "strava-v3";
+import { sportTypeTitles } from "~/types/sportTypeTitles";
 import { useActivities, type ActivityWithStreams } from "./ActivityMapUtils";
 
 interface ActivityCardProps {
@@ -18,7 +19,7 @@ function ActivityCard({ activity }: ActivityCardProps) {
             {activity.name}
           </h3>
           <p className="text-sm text-gray-600">
-            {activity.sport_type} •{" "}
+            {sportTypeTitles[activity.sport_type]} •{" "}
             {new Date(activity.start_date).toLocaleDateString()}
           </p>
           <div className="mt-2 flex gap-4 text-sm text-gray-600">
