@@ -1,10 +1,10 @@
 "use client";
 
-import { type DetailedActivityResponse } from "strava-v3";
+import { type DetailedActivity } from "strava-v3";
 import { useActivities, type ActivityWithStreams } from "./ActivityMapUtils";
 
 interface ActivityCardProps {
-  activity: DetailedActivityResponse | ActivityWithStreams;
+  activity: DetailedActivity | ActivityWithStreams;
 }
 
 function ActivityCard({ activity }: ActivityCardProps) {
