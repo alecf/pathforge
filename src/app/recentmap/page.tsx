@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { type DetailedActivityResponse } from "strava-v3";
+import { type DetailedActivity } from "strava-v3";
 import { ActivityList } from "../_components/ActivityList";
 import { ActivityMapTabs } from "../_components/ActivityMapTabs";
 import {
@@ -17,7 +17,7 @@ export default function RecentMapPage() {
     useActivities(activityParams);
 
   const [filteredActivities, setFilteredActivities] = useState<
-    (DetailedActivityResponse | ActivityWithStreams)[]
+    (DetailedActivity | ActivityWithStreams)[]
   >([]);
 
   // Initialize filtered activities once when activities first load to avoid
