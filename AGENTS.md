@@ -9,3 +9,15 @@
 - Avoid complex ternary operators, instead use `if` statements.
 - For more complex logic, use functions to encapsulate the logic, rather than using `let`.
 - Avoid explicitly casting types with `as`, instead use type inference, and/or use `satisfies` to assert the type of the data.
+
+## Checks
+
+```bash
+npm run lint       # next lint
+npm run typecheck  # tsc --noEmit
+npm run build      # next build
+```
+
+CI runs all three on every pull request. `next.config.js` imports `src/env.js`,
+so lint and build both load the env schema — set `SKIP_ENV_VALIDATION=true` when
+running them without Strava credentials or a database.
