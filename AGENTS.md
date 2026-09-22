@@ -15,9 +15,21 @@
 ```bash
 npm run lint       # next lint
 npm run typecheck  # tsc --noEmit
+npm test           # vitest run
 npm run build      # next build
 ```
 
-CI runs all three on every pull request. `next.config.js` imports `src/env.js`,
+CI runs all four on every pull request. `next.config.js` imports `src/env.js`,
 so lint and build both load the env schema — set `SKIP_ENV_VALIDATION=true` when
 running them without Strava credentials or a database.
+
+## Tests
+
+Vitest, config in `vitest.config.ts`, tests live next to the code as
+`*.test.ts`. `src/test/setup.ts` fills in throwaway env vars, so no real
+credentials are needed and nothing in the suite reaches the network.
+
+Tests that need a database get a real one: `src/test/pglite.ts` boots an
+in-process Postgres (PGlite), applies the migrations in `drizzle/`, and hands
+back a drizzle client. Point `~/server/db` at it with `vi.mock` when the code
+under test imports `db` directly.
