@@ -13,8 +13,10 @@ export default defineConfig({
       { find: /^~\//, replacement: `${srcDir}/` },
     ],
   },
-  esbuild: {
-    jsx: "automatic",
+  // tsconfig.json sets `"jsx": "preserve"` for Next.js. Vite's oxc transform
+  // would honor that and leave JSX in place, so compile it here instead.
+  oxc: {
+    jsx: { runtime: "automatic" },
   },
   test: {
     environment: "node",
