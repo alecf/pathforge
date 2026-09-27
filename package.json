@@ -61,7 +61,7 @@
     "@tailwindcss/postcss": "^4.0.15",
     "@types/delaunator": "^5.0.0",
     "@types/mapbox__polyline": "^1.0.5",
-    "@types/node": "^20.14.10",
+    "@types/node": "^22.20.4",
     "@types/rbush": "^4.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
