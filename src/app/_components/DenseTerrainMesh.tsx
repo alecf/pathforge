@@ -192,7 +192,7 @@ export function DenseTerrainSurface({
     const normals = normalsAttr as Float32BufferAttribute;
     const colorArray: number[] = [];
     const base = new Color(color);
-    const baseHSL = { h: 0, s: 0, l: 0 } as { h: number; s: number; l: number };
+    const baseHSL = { h: 0, s: 0, l: 0 };
     base.getHSL(baseHSL);
     const denom = Math.max(1e-6, maxZ - minZ);
     for (let i = 0; i < altitudes.length; i++) {
@@ -369,7 +369,7 @@ export function AdaptiveTerrainSurface({
 
     // Delaunay triangulation over XY (use augmented points)
     const coords = buildDelaunayCoords(augmentedPoints);
-    const delaunay = new Delaunator(coords as ArrayLike<number>);
+    const delaunay = new Delaunator(coords);
     // Triangle index buffer (triplets of vertex indices)
     const triangleIndices: number[] = [];
 
@@ -410,7 +410,7 @@ export function AdaptiveTerrainSurface({
     const normals = normalsAttr as Float32BufferAttribute;
     const colorArray: number[] = new Array(augmentedPoints.length * 3).fill(0);
     const base = new Color(color);
-    const baseHSL = { h: 0, s: 0, l: 0 } as { h: number; s: number; l: number };
+    const baseHSL = { h: 0, s: 0, l: 0 };
     base.getHSL(baseHSL);
     // altitude range approx from points
     let minZ = Infinity,

@@ -1,7 +1,7 @@
 import polyline from "@mapbox/polyline";
 import * as d3 from "d3";
 import { useMemo } from "react";
-import { type DetailedActivity } from "strava-v3";
+import type { DetailedActivity } from "strava-v3";
 import type { StravaActivityStream } from "~/server/api/routers/strava";
 import { api } from "~/trpc/react";
 import { useStable } from "~/util/useStable";

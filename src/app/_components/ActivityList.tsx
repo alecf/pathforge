@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { type DetailedActivity } from "strava-v3";
+import type { DetailedActivity } from "strava-v3";
 import { decodePolyline } from "./ActivityMapUtils";
 
 // Helper function to get the number of points in a polyline

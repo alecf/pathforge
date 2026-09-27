@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { type DetailedActivity } from "strava-v3";
+import type { DetailedActivity } from "strava-v3";
 import { ActivityList } from "../_components/ActivityList";
 import { ActivityMapTabs } from "../_components/ActivityMapTabs";
 import {

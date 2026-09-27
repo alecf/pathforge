@@ -5,7 +5,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import type { GeoProjection } from "d3";
 import KDBush from "kdbush";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type DetailedActivity } from "strava-v3";
+import type { DetailedActivity } from "strava-v3";
 import { Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { densify, type DensePoint } from "~/util/densifyUtils";
@@ -18,9 +18,9 @@ import {
   buildSegmentGridIndex,
   type SegmentGridIndex,
 } from "~/util/spatialIndex";
-import {
-  type ActivityWithStreams,
-  type ProjectedActivity,
+import type {
+  ActivityWithStreams,
+  ProjectedActivity,
 } from "./ActivityMapUtils";
 import { AdaptiveTerrainSurface, DenseTerrainMesh } from "./DenseTerrainMesh";
 

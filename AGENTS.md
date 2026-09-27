@@ -13,7 +13,7 @@
 ## Checks
 
 ```bash
-npm run lint       # next lint
+npm run lint       # eslint .
 npm run typecheck  # tsc --noEmit
 npm test           # vitest run
 npm run build      # next build

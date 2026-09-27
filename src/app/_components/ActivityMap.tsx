@@ -2,12 +2,9 @@
 
 import * as d3 from "d3";
 import { useEffect, useRef, useState } from "react";
-import { type DetailedActivity } from "strava-v3";
+import type { DetailedActivity } from "strava-v3";
 import { useMapProjection } from "~/util/mapUtils";
-import {
-  type ActivityWithStreams,
-  type ProjectedPoint,
-} from "./ActivityMapUtils";
+import type { ActivityWithStreams, ProjectedPoint } from "./ActivityMapUtils";
 
 interface ActivityMapProps {
   activities: (DetailedActivity | ActivityWithStreams)[];
