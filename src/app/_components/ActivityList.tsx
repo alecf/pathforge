@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { type DetailedActivityResponse } from "strava-v3";
+import { type DetailedActivity } from "strava-v3";
 import { decodePolyline } from "./ActivityMapUtils";
 
 // Helper function to get the number of points in a polyline
@@ -16,8 +16,8 @@ function metersToMiles(meters: number): number {
 }
 
 interface ActivityListProps {
-  activities: DetailedActivityResponse[];
-  onFilterChange: (filteredActivities: DetailedActivityResponse[]) => void;
+  activities: DetailedActivity[];
+  onFilterChange: (filteredActivities: DetailedActivity[]) => void;
 }
 
 export function ActivityList({

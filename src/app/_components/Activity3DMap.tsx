@@ -5,7 +5,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import type { GeoProjection } from "d3";
 import KDBush from "kdbush";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { type DetailedActivityResponse } from "strava-v3";
+import { type DetailedActivity } from "strava-v3";
 import { Vector3 } from "three";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { densify, type DensePoint } from "~/util/densifyUtils";
@@ -25,7 +25,7 @@ import {
 import { AdaptiveTerrainSurface, DenseTerrainMesh } from "./DenseTerrainMesh";
 
 interface Activity3DMapProps {
-  activities: (DetailedActivityResponse | ActivityWithStreams)[];
+  activities: (DetailedActivity | ActivityWithStreams)[];
   width: number;
   height: number;
 }

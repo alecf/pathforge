@@ -1,6 +1,6 @@
 import {
   default as stravaApi,
-  type DetailedActivityResponse,
+  type DetailedActivity,
   type Strava,
 } from "strava-v3";
 import { z } from "zod";
@@ -55,7 +55,7 @@ export const stravaRouter = createTRPCRouter({
         // Call the Strava API with the provided arguments
         const activities = await strava.athlete.listActivities(input ?? {});
 
-        return activities as DetailedActivityResponse[];
+        return activities as DetailedActivity[];
       }),
 
     getActivity: protectedProcedure
@@ -113,8 +113,7 @@ export const stravaRouter = createTRPCRouter({
           // Call the Strava API to get activity streams
           const streams = await strava.streams.activity({
             id: input.id,
-            types: input.keys,
-            keys: input.keys?.join(","),
+            keys: input.keys,
             resolution: input.resolution ?? "medium",
             key_by_type: input.key_by_type,
           });
@@ -164,7 +163,7 @@ export const stravaRouter = createTRPCRouter({
             r,
           ): r is {
             id: string;
-            activity: DetailedActivityResponse;
+            activity: DetailedActivity;
             success: true;
           } => r.success,
         );

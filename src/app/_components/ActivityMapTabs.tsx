@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { type DetailedActivityResponse } from "strava-v3";
+import { type DetailedActivity } from "strava-v3";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Activity3DMap } from "./Activity3DMap";
 import { ActivityMap } from "./ActivityMap";
 import { type ActivityWithStreams } from "./ActivityMapUtils";
 
 interface ActivityMapTabsProps {
-  activities: (DetailedActivityResponse | ActivityWithStreams)[];
+  activities: (DetailedActivity | ActivityWithStreams)[];
 }
 
 export function ActivityMapTabs({ activities }: ActivityMapTabsProps) {

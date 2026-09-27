@@ -1,5 +1,5 @@
 import type * as d3 from "d3";
-import { type DetailedActivityResponse } from "strava-v3";
+import { type DetailedActivity } from "strava-v3";
 import {
   type ActivityWithStreams,
   type ProjectedActivity,
@@ -9,7 +9,7 @@ import {
 } from "~/app/_components/ActivityMapUtils";
 
 export interface MapViewProps {
-  activities: (DetailedActivityResponse | ActivityWithStreams)[];
+  activities: (DetailedActivity | ActivityWithStreams)[];
   width: number;
   height: number;
 }
@@ -44,7 +44,7 @@ export function useMapProjection(props: MapViewProps): MapViewState {
  * Calculate altitude bounds across all activities for normalization
  */
 export function calculateAltitudeBounds(
-  activities: (DetailedActivityResponse | ActivityWithStreams)[],
+  activities: (DetailedActivity | ActivityWithStreams)[],
 ): { minAltitude: number; maxAltitude: number; hasAltitudeData: boolean } {
   let minAltitude = Infinity;
   let maxAltitude = -Infinity;
@@ -73,7 +73,7 @@ export function calculateAltitudeBounds(
  * Get route data for an activity (shared between 2D and 3D)
  */
 export function getActivityRouteData(
-  activity: DetailedActivityResponse | ActivityWithStreams,
+  activity: DetailedActivity | ActivityWithStreams,
 ) {
   // First try to use streams data if available (most accurate)
   if ("detailedPoints" in activity && activity.detailedPoints) {
