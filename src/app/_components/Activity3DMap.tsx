@@ -211,7 +211,11 @@ function DynamicClipping({
   sizeZ,
   autoClip,
 }: DynamicClippingProps) {
-  const { camera } = useThree();
+  // Subscribed only so the initial clipping setup re-runs if the default
+  // camera is replaced. The effect reads the camera it mutates through get(),
+  // r3f's accessor for live store state outside render.
+  const camera = useThree((state) => state.camera);
+  const get = useThree((state) => state.get);
 
   // Compute static model radius from bounds
   const altitudeSpan = altitudeBounds.hasAltitudeData ? 100 : 0;
@@ -224,7 +228,7 @@ function DynamicClipping({
 
   useEffect(() => {
     // Initial clipping setup based on model size
-    if (!camera) return;
+    const { camera } = get();
     const initialNear = Math.max(0.1, modelRadius / 500);
     const initialFar = Math.max(modelRadius * 20, 2000);
     camera.near = initialNear;
@@ -234,9 +238,9 @@ function DynamicClipping({
       controlsRef.current.minDistance = Math.max(1, modelRadius * 0.02);
       controlsRef.current.maxDistance = Math.max(modelRadius * 20, 2000);
     }
-  }, [camera, controlsRef, modelRadius]);
+  }, [camera, get, controlsRef, modelRadius]);
 
-  useFrame(() => {
+  useFrame(({ camera }) => {
     const target =
       controlsRef.current?.target ?? new Vector3(centerX, 0, centerZ);
     const camPos = camera.position;
@@ -396,10 +400,11 @@ export function Activity3DMap({
       .join("|");
   }, [activities]);
 
-  const runDensification = async (
-    method: "mls" | "interpolation" | "delaunay",
-  ) => {
-    if (projectedActivities.length === 0) return;
+  // Synchronous first half of terrain generation. Picks the activities to
+  // densify and raises the loading flag, or clears the terrain when no
+  // activity has altitude data. Returns null when there is nothing to build.
+  const beginDensification = (): ProjectedActivity[] | null => {
+    if (projectedActivities.length === 0) return null;
     // Exclude activities without any altitude samples to avoid contaminating terrain
     const activitiesWithAltitude = projectedActivities.filter((a) =>
       a.points.some((p) => p.altitude !== undefined),
@@ -407,44 +412,66 @@ export function Activity3DMap({
     if (activitiesWithAltitude.length === 0) {
       setDensePoints([]);
       setShowDenseTerrain(false);
-      return;
+      return null;
     }
     setIsDensifying(true);
-    try {
-      const t0 =
-        typeof performance !== "undefined" ? performance.now() : Date.now();
-      console.log(`🚀 Starting terrain densification using ${method}...`);
-      const result = await densify(activitiesWithAltitude, {
-        method,
-        density: 8,
-        debug: true,
+    return activitiesWithAltitude;
+  };
+
+  // Asynchronous second half: builds the terrain, caches it for the current
+  // selection, and lowers the loading flag. Every state update sits in a
+  // promise callback, so calling this from an effect updates state only
+  // after the terrain is built.
+  const completeDensification = (
+    method: "mls" | "interpolation" | "delaunay",
+    activitiesWithAltitude: ProjectedActivity[],
+  ): Promise<void> => {
+    const t0 =
+      typeof performance !== "undefined" ? performance.now() : Date.now();
+    console.log(`🚀 Starting terrain densification using ${method}...`);
+    return densify(activitiesWithAltitude, {
+      method,
+      density: 8,
+      debug: true,
+    })
+      .then((result) => {
+        const { minAltitude, maxAltitude, hasAltitudeData } = altitudeBounds;
+        const altitudeRange = Math.max(1e-6, maxAltitude - minAltitude);
+        const normalizedDense = result.densePoints.map((p) => ({
+          ...p,
+          z: hasAltitudeData ? ((p.z - minAltitude) / altitudeRange) * 100 : 0,
+        }));
+        setDensePoints(normalizedDense);
+        setCacheBySelection((prev) => ({
+          ...prev,
+          [selectionKey]: {
+            ...(prev[selectionKey] ?? {}),
+            [method]: normalizedDense,
+          },
+        }));
+        setShowDenseTerrain(true);
+        const t1 =
+          typeof performance !== "undefined" ? performance.now() : Date.now();
+        console.log(
+          `✅ Terrain generation complete: ${result.densePoints.length} points (${method}) in ${(
+            t1 - t0
+          ).toFixed(1)}ms`,
+        );
+      })
+      .catch((error: unknown) => {
+        console.error("❌ Densification failed:", error);
+      })
+      .finally(() => {
+        setIsDensifying(false);
       });
-      const { minAltitude, maxAltitude, hasAltitudeData } = altitudeBounds;
-      const altitudeRange = Math.max(1e-6, maxAltitude - minAltitude);
-      const normalizedDense = result.densePoints.map((p) => ({
-        ...p,
-        z: hasAltitudeData ? ((p.z - minAltitude) / altitudeRange) * 100 : 0,
-      }));
-      setDensePoints(normalizedDense);
-      setCacheBySelection((prev) => ({
-        ...prev,
-        [selectionKey]: {
-          ...(prev[selectionKey] ?? {}),
-          [method]: normalizedDense,
-        },
-      }));
-      setShowDenseTerrain(true);
-      const t1 =
-        typeof performance !== "undefined" ? performance.now() : Date.now();
-      console.log(
-        `✅ Terrain generation complete: ${result.densePoints.length} points (${method}) in ${(
-          t1 - t0
-        ).toFixed(1)}ms`,
-      );
-    } catch (error) {
-      console.error("❌ Densification failed:", error);
-    } finally {
-      setIsDensifying(false);
+  };
+
+  const runDensification = async (
+    method: "mls" | "interpolation" | "delaunay",
+  ) => {
+    const activitiesWithAltitude = beginDensification();
+    if (activitiesWithAltitude) {
+      await completeDensification(method, activitiesWithAltitude);
     }
   };
 
@@ -462,18 +489,45 @@ export function Activity3DMap({
     }
   };
 
-  // If selected activities change while terrain is shown, regenerate lazily
-  useEffect(() => {
-    if (!showDenseTerrain) return;
-    const cached = cacheBySelection[selectionKey]?.[selectedMethod];
-    if (cached && cached.length > 0) {
-      setDensePoints(cached);
-      return;
+  // When the selected activities change while terrain is shown, switch to
+  // the cached terrain for the new selection, or start regenerating it. This
+  // adjusts state during render rather than in an effect, so no frame renders
+  // with a stale loading flag.
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [prevSelectionKey, setPrevSelectionKey] = useState(selectionKey);
+  const [pendingRegeneration, setPendingRegeneration] = useState<{
+    method: "mls" | "interpolation" | "delaunay";
+    activitiesWithAltitude: ProjectedActivity[];
+  } | null>(null);
+  if (selectionKey !== prevSelectionKey) {
+    setPrevSelectionKey(selectionKey);
+    if (showDenseTerrain) {
+      const cached = cacheBySelection[selectionKey]?.[selectedMethod];
+      if (cached && cached.length > 0) {
+        setDensePoints(cached);
+      } else {
+        // No cache for this selection+method, generate lazily
+        const activitiesWithAltitude = beginDensification();
+        if (activitiesWithAltitude) {
+          setPendingRegeneration({
+            method: selectedMethod,
+            activitiesWithAltitude,
+          });
+        }
+      }
     }
-    // No cache for this selection+method, generate lazily
-    void runDensification(selectedMethod);
+  }
+
+  // The asynchronous half runs once the new selection has committed. Each
+  // request is a new object, so the effect runs once per request.
+  useEffect(() => {
+    if (!pendingRegeneration) return;
+    void completeDensification(
+      pendingRegeneration.method,
+      pendingRegeneration.activitiesWithAltitude,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectionKey]);
+  }, [pendingRegeneration]);
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-lg bg-gray-900">
