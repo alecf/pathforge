@@ -9,18 +9,6 @@ export default tseslint.config(
   },
   ...nextCoreWebVitals,
   {
-    // eslint-config-next 16 turns on the React Compiler rules from
-    // eslint-plugin-react-hooks 7. The existing react-three-fiber code mutates
-    // hook-returned three.js objects and times work inside useMemo, which
-    // these rules flag. Report them as warnings until that code is revisited.
-    rules: {
-      "react-hooks/immutability": "warn",
-      "react-hooks/purity": "warn",
-      "react-hooks/refs": "warn",
-      "react-hooks/set-state-in-effect": "warn",
-    },
-  },
-  {
     files: ["**/*.ts", "**/*.tsx"],
     plugins: {
       drizzle,
