@@ -1,5 +1,5 @@
 import type * as d3 from "d3";
-import { type DetailedActivity } from "strava-v3";
+import type { DetailedActivity } from "strava-v3";
 import {
   type ActivityWithStreams,
   type ProjectedActivity,
