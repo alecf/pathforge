@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createCaller } from "~/server/api/root";
 import type { createTRPCContext } from "~/server/api/trpc";
-import { db } from "~/server/db";
+import { getDb } from "~/server/db";
 import { getStravaAccessToken } from "~/server/auth/token-utils";
 
 const strava = vi.hoisted(() => ({
@@ -40,7 +40,7 @@ vi.mock("~/server/auth/token-utils", () => ({
 type Context = Awaited<ReturnType<typeof createTRPCContext>>;
 
 function caller(session: Context["session"] = SIGNED_IN) {
-  return createCaller({ db, session, headers: new Headers() });
+  return createCaller({ db: getDb(), session, headers: new Headers() });
 }
 
 const SIGNED_IN = {

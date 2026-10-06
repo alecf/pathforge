@@ -13,7 +13,9 @@ export const env = createEnv({
         : z.string().optional(),
     STRAVA_CLIENT_ID: z.string(),
     STRAVA_CLIENT_SECRET: z.string(),
-    DATABASE_URL: z.string().url(),
+    // Local dev, tests and drizzle-kit. On Cloudflare the Hyperdrive binding
+    // provides the connection string instead.
+    DATABASE_URL: z.string().url().optional(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),
