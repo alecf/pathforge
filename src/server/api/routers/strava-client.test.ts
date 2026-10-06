@@ -125,7 +125,9 @@ describe("streams.activity", () => {
     const url = lastOptions(request).url;
     expect(url.startsWith("activities/99/streams?")).toBe(true);
     const query = new URLSearchParams(url.split("?")[1]);
-    expect(query.getAll("keys")).toEqual(["latlng", "altitude"]);
+    // Strava honors only the last repeated query param, so the keys must go
+    // out as a single comma-separated value.
+    expect(query.getAll("keys")).toEqual(["latlng,altitude"]);
     expect(query.get("key_by_type")).toBe("true");
     expect(query.get("resolution")).toBe("medium");
   });
