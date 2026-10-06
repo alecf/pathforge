@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "build": "next build",
-    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "check": "biome lint --error-on-warnings && tsc --noEmit",
     "codegen": "npx @hey-api/openapi-ts",
     "db:generate": "drizzle-kit generate",
@@ -65,6 +64,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
+    "@cloudflare/workers-types": "^5.20261006.1",
     "@electric-sql/pglite": "^0.5.8",
     "@tailwindcss/postcss": "^4.0.15",
     "@types/delaunator": "^5.0.0",

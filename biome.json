@@ -8,8 +8,7 @@
   "files": {
     "includes": [
       "**",
-      "!src/strava-client",
-      "!cloudflare-env.d.ts"
+      "!src/strava-client"
     ]
   },
   "formatter": {
