@@ -13,15 +13,19 @@
 ## Checks
 
 ```bash
-npm run lint       # eslint .
+npm run lint       # biome lint
 npm run typecheck  # tsc --noEmit
 npm test           # vitest run
 npm run build      # next build
 ```
 
 CI runs all four on every pull request. `next.config.js` imports `src/env.js`,
-so lint and build both load the env schema — set `SKIP_ENV_VALIDATION=true` when
-running them without Strava credentials or a database.
+so the build loads the env schema — set `SKIP_ENV_VALIDATION=true` when running
+it without Strava credentials or a database.
+
+Linting is Biome (`biome.json`), not ESLint. Lint fails on warnings too, so a
+rule is either fixed or turned off — suppress a single case with
+`// biome-ignore lint/<group>/<rule>: <reason>`.
 
 ## Tests
 

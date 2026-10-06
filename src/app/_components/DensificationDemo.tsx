@@ -119,6 +119,7 @@ export function DensificationDemo() {
       <div className="space-y-2">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
           <button
+            type="button"
             onClick={() => handleTestMethod("auto")}
             disabled={isProcessing}
             className="rounded bg-purple-500 px-4 py-2 text-white hover:bg-purple-600 disabled:opacity-50"
@@ -127,6 +128,7 @@ export function DensificationDemo() {
           </button>
 
           <button
+            type="button"
             onClick={() => handleTestMethod("mls")}
             disabled={isProcessing}
             className="rounded bg-blue-500 px-4 py-2 text-white hover:bg-blue-600 disabled:opacity-50"
@@ -135,6 +137,7 @@ export function DensificationDemo() {
           </button>
 
           <button
+            type="button"
             onClick={() => handleTestMethod("interpolation")}
             disabled={isProcessing}
             className="rounded bg-green-500 px-4 py-2 text-white hover:bg-green-600 disabled:opacity-50"
@@ -160,6 +163,7 @@ export function DensificationDemo() {
           </h3>
           <div className="space-y-1 text-sm">
             {densePoints.slice(0, 10).map((point, index) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: static list, rebuilt whole and never reordered
               <div key={index}>
                 Point {index + 1}: x={point.x.toFixed(2)}, y=
                 {point.y.toFixed(2)}, z={point.z.toFixed(2)}

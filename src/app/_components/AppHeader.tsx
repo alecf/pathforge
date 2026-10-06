@@ -91,6 +91,7 @@ export function AppHeader() {
           <div className="flex items-center space-x-4">
             <div className="relative">
               <button
+                type="button"
                 onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
                 className="flex items-center space-x-2 rounded-full text-sm focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:outline-none"
               >
@@ -109,6 +110,7 @@ export function AppHeader() {
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -126,6 +128,7 @@ export function AppHeader() {
                     <div className="text-gray-500">{session.user?.email}</div>
                   </div>
                   <button
+                    type="button"
                     onClick={handleSignOut}
                     className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
                   >
@@ -140,8 +143,10 @@ export function AppHeader() {
 
       {/* Backdrop to close menu when clicking outside */}
       {isProfileMenuOpen && (
-        <div
-          className="fixed inset-0 z-40"
+        <button
+          type="button"
+          aria-label="Close menu"
+          className="fixed inset-0 z-40 cursor-default"
           onClick={() => setIsProfileMenuOpen(false)}
         />
       )}

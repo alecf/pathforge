@@ -13,8 +13,8 @@ jobs:
   ci:
     runs-on: ubuntu-latest
 
-    # `next.config.js` imports `src/env.js`, so lint and build both load the env
-    # schema. CI has no Strava credentials or database, so skip validation.
+    # `next.config.js` imports `src/env.js`, so the build loads the env schema.
+    # CI has no Strava credentials or database, so skip validation.
     env:
       SKIP_ENV_VALIDATION: "true"
 

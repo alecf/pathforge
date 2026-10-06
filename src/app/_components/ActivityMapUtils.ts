@@ -446,8 +446,7 @@ export function useDetailedActivitiesWithStreams(activityIds: string[]) {
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const EMPTY_ARRAY = [] satisfies any[];
+const EMPTY_ARRAY = [] satisfies unknown[];
 /**
  * Unified hook that combines basic activity list with detailed activity data
  * Returns a unified list where activities are detailed when available, basic when not
@@ -546,8 +545,7 @@ export function useActivitiesPages(options: {
   const basicActivities = useMemo(
     () =>
       pageQueries
-        .map((q) => q.data ?? EMPTY_ARRAY)
-        .flat()
+        .flatMap((q) => q.data ?? EMPTY_ARRAY)
         // Deduplicate by id in case of overlaps
         .filter(
           (activity, index, arr) =>

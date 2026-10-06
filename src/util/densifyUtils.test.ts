@@ -19,11 +19,9 @@ describe("getAvailableMethods", () => {
   it("advertises the three densification methods", async () => {
     const methods = await getAvailableMethods();
 
-    expect(methods.map((entry) => entry.method).sort()).toEqual([
-      "delaunay",
-      "interpolation",
-      "mls",
-    ]);
+    expect(
+      methods.map((entry) => entry.method).sort((a, b) => a.localeCompare(b)),
+    ).toEqual(["delaunay", "interpolation", "mls"]);
     methods.forEach((entry) => {
       expect(entry.name).toBeTruthy();
       expect(entry.description).toBeTruthy();

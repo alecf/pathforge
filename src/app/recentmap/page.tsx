@@ -29,10 +29,10 @@ export default function RecentMapPage() {
 
   // Initialize filtered activities once when activities first load to avoid
   // overwriting user's selections when data updates (e.g., streams resolve)
-  const initializedRef = useRef(false);
+  const initializedRef = useRef<boolean>(false);
   const lastToastKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!initializedRef.current && activities && activities.length > 0) {
+    if (!initializedRef.current && activities.length > 0) {
       setFilteredActivities(activities);
       initializedRef.current = true;
     }
@@ -53,6 +53,7 @@ export default function RecentMapPage() {
       description: (
         <ul className="list-disc pl-5 text-gray-800">
           {messages.map((m, idx) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static list, rebuilt whole and never reordered
             <li key={idx} className="truncate">
               {m}
             </li>

@@ -42,7 +42,7 @@ export interface SegmentGridIndex {
 export function buildPointsIndex(
   activities: ProjectedActivitySimple[],
 ): PointsIndex | undefined {
-  if (!activities || activities.length === 0) return undefined;
+  if (activities.length === 0) return undefined;
 
   const points: IndexedPoint[] = [];
   let minX = Infinity,
@@ -52,7 +52,7 @@ export function buildPointsIndex(
 
   for (const activity of activities) {
     const activityId = activity.id;
-    const pts = activity.points ?? [];
+    const pts = activity.points;
     for (let i = 0; i < pts.length; i++) {
       const p = pts[i]!;
       points.push({ x: p.x, y: p.y, activityId, pointIndex: i });
@@ -98,7 +98,7 @@ export function buildSegmentGridIndex(
   activities: ProjectedActivitySimple[],
   maxEntries?: number,
 ): SegmentGridIndex | undefined {
-  if (!activities || activities.length === 0) return undefined;
+  if (activities.length === 0) return undefined;
 
   const segments: SegmentRecord[] = [];
   let minX = Infinity,
@@ -108,7 +108,7 @@ export function buildSegmentGridIndex(
 
   for (const activity of activities) {
     const activityId = activity.id;
-    const pts = activity.points ?? [];
+    const pts = activity.points;
     for (let i = 0; i < pts.length - 1; i++) {
       const a = pts[i]!;
       const b = pts[i + 1]!;
