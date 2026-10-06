@@ -23,29 +23,31 @@ function ActivityCard({ activity }: ActivityCardProps) {
             {new Date(activity.start_date).toLocaleDateString()}
           </p>
           <div className="mt-2 flex gap-4 text-sm text-gray-600">
-            {activity.distance && (
+            {activity.distance > 0 && (
               <span>Distance: {(activity.distance / 1000).toFixed(2)} km</span>
             )}
-            {activity.moving_time && (
+            {activity.moving_time > 0 && (
               <span>Duration: {Math.round(activity.moving_time / 60)} min</span>
             )}
-            {activity.average_speed && (
+            {activity.average_speed > 0 && (
               <span>
                 Avg Speed: {(activity.average_speed * 3.6).toFixed(1)} km/h
               </span>
             )}
-            {activity.total_elevation_gain && (
+            {activity.total_elevation_gain > 0 && (
               <span>
                 Elevation Gain: {activity.total_elevation_gain.toFixed(0)} m
               </span>
             )}
           </div>
-          {(activity.map?.polyline ?? activity.map?.summary_polyline) && (
+          {Boolean(
+            activity.map?.polyline ?? activity.map?.summary_polyline,
+          ) && (
             <p className="mt-1 text-xs text-green-600">Route data available</p>
           )}
         </div>
         <div className="text-right">
-          {activity.distance && (
+          {activity.distance > 0 && (
             <>
               <div className="text-2xl font-bold text-orange-600">
                 {(activity.distance / 1000).toFixed(1)}
@@ -80,6 +82,7 @@ export function Dashboard() {
       description: (
         <ul className="list-disc pl-5 text-gray-800">
           {messages.map((m, idx) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static list, rebuilt whole and never reordered
             <li key={idx} className="truncate">
               {m}
             </li>

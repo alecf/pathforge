@@ -17,9 +17,7 @@ vi.mock("~/server/auth", () => ({
  */
 function trpcRequest(path: string, params: Record<string, string>) {
   const url = new URL(`http://localhost:9300/api/trpc/${path}`);
-  Object.entries(params).forEach(([key, value]) =>
-    url.searchParams.set(key, value),
-  );
+  url.search = new URLSearchParams(params).toString();
   return new Request(url) as unknown as NextRequest;
 }
 

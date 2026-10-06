@@ -77,6 +77,8 @@ export function ActivityMap({ activities, width, height }: ActivityMapProps) {
         width={dimensions.width}
         height={dimensions.height}
         className="h-full w-full"
+        role="img"
+        aria-label="Map of activity routes"
       >
         <defs>
           <filter id="glow">

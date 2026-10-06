@@ -257,8 +257,6 @@ export function DenseTerrainSurface({
   bounds,
   resolution = 50,
   color = "#4ade80",
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  opacity = 0.3,
   highlightRadius = 5,
   segmentIndex,
 }: DenseTerrainSurfaceProps) {
@@ -508,8 +506,6 @@ function buildAdaptiveGeometry({
 export function AdaptiveTerrainSurface({
   densePoints,
   color = "#4ade80",
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  opacity = 0.35,
   maxEdgeLength,
   mapBounds,
   segmentIndex,

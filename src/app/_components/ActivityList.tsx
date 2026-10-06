@@ -58,12 +58,14 @@ export function ActivityList({
         <h3 className="text-lg font-semibold text-gray-900">Activities</h3>
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={handleSelectAll}
             className="rounded bg-orange-100 px-3 py-1 text-sm text-orange-700 hover:bg-orange-200"
           >
             Select All
           </button>
           <button
+            type="button"
             onClick={handleSelectNone}
             className="rounded bg-gray-100 px-3 py-1 text-sm text-gray-700 hover:bg-gray-200"
           >
@@ -80,28 +82,24 @@ export function ActivityList({
           );
 
           return (
-            <div
+            <label
               key={activity.id}
-              className={`mb-2 cursor-pointer rounded p-3 transition-colors hover:shadow-sm ${
+              className={`mb-2 block cursor-pointer rounded p-3 transition-colors hover:shadow-sm ${
                 isSelected
                   ? "border border-orange-200 bg-orange-50"
                   : "border border-gray-100 bg-gray-50 hover:bg-gray-100"
               }`}
-              onClick={() =>
-                handleActivityToggle(activity.id.toString(), !isSelected)
-              }
             >
               <div className="flex items-start gap-3">
                 <input
                   type="checkbox"
                   checked={isSelected}
-                  onChange={(e) => {
-                    e.stopPropagation(); // Prevent card click when clicking checkbox
+                  onChange={(e) =>
                     handleActivityToggle(
                       activity.id.toString(),
                       e.target.checked,
-                    );
-                  }}
+                    )
+                  }
                   className="mt-1"
                 />
                 <div className="flex-1">
@@ -126,7 +124,7 @@ export function ActivityList({
                   )}
                 </div>
               </div>
-            </div>
+            </label>
           );
         })}
       </div>
@@ -141,6 +139,7 @@ export function ActivityList({
           </span>
           {onLoadMore && (
             <button
+              type="button"
               onClick={onLoadMore}
               disabled={isLoadingMore}
               className="rounded bg-gray-100 px-3 py-1 text-sm text-gray-700 hover:bg-gray-200 disabled:opacity-50"

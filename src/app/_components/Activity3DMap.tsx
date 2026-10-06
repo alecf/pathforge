@@ -149,7 +149,7 @@ function ActivityLine({
       ((a?.[1] ?? 0) + (b?.[1] ?? 0)) / 2,
       ((a?.[2] ?? 0) + (b?.[2] ?? 0)) / 2,
     );
-    const dist = camera?.position.distanceTo(mid) ?? 500;
+    const dist = camera.position.distanceTo(mid);
     // Map distance to width: closer => ~3, far => ~0.6 (screen-space relative)
     const w = Math.max(0.6, Math.min(3, 150 / Math.max(50, dist)));
     return w;
@@ -276,6 +276,7 @@ function DynamicClipping({
     return Math.max(1, diag3D * 0.5);
   }, [sizeX, sizeZ, altitudeSpan]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: camera is read via get() so the React Compiler allows mutating it, but the effect must re-run when it changes
   useEffect(() => {
     // Initial clipping setup based on model size
     const { camera } = get();
@@ -359,8 +360,7 @@ export function Activity3DMap({
   const idToDistance = useMemo(() => {
     const m = new Map<string, number>();
     for (const a of activities) {
-      const id = a?.id?.toString?.();
-      if (!id) continue;
+      const id = a.id.toString();
       const d = a.distance;
       if (typeof d === "number") m.set(id, d);
     }
@@ -462,7 +462,7 @@ export function Activity3DMap({
     return activities
       .map((a) => a.id?.toString?.() ?? "")
       .filter(Boolean)
-      .sort()
+      .sort((x, y) => x.localeCompare(y))
       .join("|");
   }, [activities]);
 
@@ -586,13 +586,13 @@ export function Activity3DMap({
 
   // The asynchronous half runs once the new selection has committed. Each
   // request is a new object, so the effect runs once per request.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only re-run for a new request, not when completeDensification changes
   useEffect(() => {
     if (!pendingRegeneration) return;
     void completeDensification(
       pendingRegeneration.method,
       pendingRegeneration.activitiesWithAltitude,
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingRegeneration]);
 
   return (
@@ -613,6 +613,7 @@ export function Activity3DMap({
         {/* Render mode toggle */}
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={() => setRenderMode("mesh")}
             disabled={isDensifying}
             className={`rounded px-3 py-1 text-xs text-white ${renderMode === "mesh" ? "bg-emerald-600" : "bg-gray-700 hover:bg-gray-600"} disabled:opacity-50`}
@@ -620,6 +621,7 @@ export function Activity3DMap({
             Mesh
           </button>
           <button
+            type="button"
             onClick={() => setRenderMode("surface")}
             disabled={isDensifying}
             className={`rounded px-3 py-1 text-xs text-white ${renderMode === "surface" ? "bg-emerald-600" : "bg-gray-700 hover:bg-gray-600"} disabled:opacity-50`}
@@ -631,6 +633,7 @@ export function Activity3DMap({
         {/* Densification method toggle */}
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={() => void handleSelectMethod("mls")}
             disabled={isDensifying}
             className={`rounded px-3 py-1 text-xs text-white ${selectedMethod === "mls" ? "bg-purple-600" : "bg-gray-700 hover:bg-gray-600"} disabled:opacity-50`}
@@ -638,6 +641,7 @@ export function Activity3DMap({
             MLS
           </button>
           <button
+            type="button"
             onClick={() => void handleSelectMethod("interpolation")}
             disabled={isDensifying}
             className={`rounded px-3 py-1 text-xs text-white ${selectedMethod === "interpolation" ? "bg-purple-600" : "bg-gray-700 hover:bg-gray-600"} disabled:opacity-50`}
@@ -645,6 +649,7 @@ export function Activity3DMap({
             Interpolation
           </button>
           <button
+            type="button"
             onClick={() => void handleSelectMethod("delaunay")}
             disabled={isDensifying}
             className={`rounded px-3 py-1 text-xs text-white ${selectedMethod === "delaunay" ? "bg-purple-600" : "bg-gray-700 hover:bg-gray-600"} disabled:opacity-50`}
@@ -685,6 +690,7 @@ export function Activity3DMap({
         </label>
 
         <button
+          type="button"
           onClick={() => {
             if (controlsRef.current) {
               controlsRef.current.reset();
@@ -735,31 +741,29 @@ export function Activity3DMap({
         />
 
         {/* Dense terrain */}
-        {showDenseTerrain && densePoints.length > 0 && (
-          <>
-            {renderMode === "mesh" ? (
-              <DenseTerrainMesh
-                densePoints={densePoints}
-                pointSize={3}
-                color="#4ade80"
-                opacity={0.4}
-              />
-            ) : segmentIndex ? (
-              <AdaptiveTerrainSurface
-                densePoints={densePoints}
-                color="#22c55e"
-                opacity={0.6}
-                segmentIndex={segmentIndex}
-                mapBounds={{
-                  minX: bounds.minX,
-                  maxX: bounds.maxX,
-                  minY: bounds.minY,
-                  maxY: bounds.maxY,
-                }}
-              />
-            ) : null}
-          </>
-        )}
+        {showDenseTerrain &&
+          densePoints.length > 0 &&
+          (renderMode === "mesh" ? (
+            <DenseTerrainMesh
+              densePoints={densePoints}
+              pointSize={3}
+              color="#4ade80"
+              opacity={0.4}
+            />
+          ) : segmentIndex ? (
+            <AdaptiveTerrainSurface
+              densePoints={densePoints}
+              color="#22c55e"
+              opacity={0.6}
+              segmentIndex={segmentIndex}
+              mapBounds={{
+                minX: bounds.minX,
+                maxX: bounds.maxX,
+                minY: bounds.minY,
+                maxY: bounds.maxY,
+              }}
+            />
+          ) : null)}
 
         {/* Controls */}
         <OrbitControls
@@ -794,10 +798,10 @@ export function Activity3DMap({
             left: Math.max(8, card.x + 12),
             top: Math.max(8, card.y + 12),
           }}
-          onClick={(e) => e.stopPropagation()}
         >
           <div className="font-medium text-gray-900">
-            {projectedActivities.find((a) => String(a.id) === card.id)?.name ?? "Ride"}
+            {projectedActivities.find((a) => String(a.id) === card.id)?.name ??
+              "Ride"}
           </div>
           <div className="mt-1 text-gray-600">
             {(() => {
