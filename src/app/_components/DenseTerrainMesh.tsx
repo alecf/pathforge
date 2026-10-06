@@ -95,6 +95,159 @@ interface DenseTerrainSurfaceProps {
   segmentIndex: SegmentGridIndex;
 }
 
+type SurfaceGeometryParams = Required<
+  Pick<
+    DenseTerrainSurfaceProps,
+    | "densePoints"
+    | "bounds"
+    | "resolution"
+    | "color"
+    | "highlightRadius"
+    | "segmentIndex"
+  >
+>;
+
+// Builds the grid surface outside render so the timing log's clock reads
+// stay out of the component. The geometry depends only on the params.
+function buildSurfaceGeometry({
+  densePoints,
+  bounds,
+  resolution,
+  color,
+  highlightRadius,
+  segmentIndex,
+}: SurfaceGeometryParams): BufferGeometry {
+  const start =
+    typeof performance !== "undefined" ? performance.now() : Date.now();
+  console.log(
+    `🛠️ Regenerating surface… (resolution=${resolution}, densePoints=${densePoints.length})`,
+  );
+  const geometry = new BufferGeometry();
+
+  // Create a grid-based surface from the dense points
+  const { minX, maxX, minY, maxY, minZ, maxZ } = bounds;
+  const stepX = (maxX - minX) / resolution;
+  const stepY = (maxY - minY) / resolution;
+
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const altitudes: number[] = [];
+  const colors: number[] = [];
+  const trailColor = new Color("#8B4513");
+
+  // Create vertices for the surface
+  for (let i = 0; i <= resolution; i++) {
+    for (let j = 0; j <= resolution; j++) {
+      const x = minX + i * stepX;
+      const y = minY + j * stepY;
+
+      // Find the closest dense point to get elevation
+      let closestZ = minZ;
+      let closestDistance = Infinity;
+
+      densePoints.forEach((point) => {
+        const distance = Math.sqrt((x - point.x) ** 2 + (y - point.y) ** 2);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestZ = point.z;
+        }
+      });
+
+      positions.push(x, closestZ, y);
+      altitudes.push(closestZ);
+      // proximity-based color blending to show trails on the surface
+      const trailness = isPointNearAnySegment(
+        segmentIndex,
+        x,
+        y,
+        highlightRadius,
+      )
+        ? 1
+        : 0;
+      // Mix base surface color with trail color based on trailness (0 or 1)
+      const baseCol = new Color(color);
+      const mixed = baseCol.clone().lerp(trailColor, trailness);
+      colors.push(mixed.r, mixed.g, mixed.b);
+    }
+  }
+
+  // Create triangles for the surface
+  for (let i = 0; i < resolution; i++) {
+    for (let j = 0; j < resolution; j++) {
+      const a = i * (resolution + 1) + j;
+      const b = a + 1;
+      const c = (i + 1) * (resolution + 1) + j;
+      const d = c + 1;
+
+      // First triangle
+      indices.push(a, b, c);
+      // Second triangle
+      indices.push(b, d, c);
+    }
+  }
+
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+
+  // Build subtle vertex colors using altitude and very gentle slope contrast (from normals)
+  let normalsAttr = geometry.getAttribute("normal");
+  if (!normalsAttr) {
+    geometry.computeVertexNormals();
+    normalsAttr = geometry.getAttribute("normal");
+  }
+  const normals = normalsAttr as Float32BufferAttribute;
+  const colorArray: number[] = [];
+  const base = new Color(color);
+  const baseHSL = { h: 0, s: 0, l: 0 };
+  base.getHSL(baseHSL);
+  const denom = Math.max(1e-6, maxZ - minZ);
+  for (let i = 0; i < altitudes.length; i++) {
+    const alt = altitudes[i] ?? minZ;
+    const tAlt = Math.min(1, Math.max(0, (alt - minZ) / denom));
+    const ny = Math.max(0, Math.min(1, normals.getY(i)));
+    const slope = 1 - ny; // 0 flat, 1 vertical
+
+    // Much gentler shading: minimal darkening on steep slopes
+    const lightness = Math.max(
+      0,
+      Math.min(1, baseHSL.l * 0.92 + tAlt * 0.12 - slope * 0.04),
+    );
+    const saturation = Math.max(
+      0,
+      Math.min(1, baseHSL.s * 0.98 + slope * 0.06),
+    );
+    // Combine subtle shading with trail color by lerping towards existing trail-mixed color
+    const shaded = new Color().setHSL(baseHSL.h, saturation, lightness);
+    // component offset into flat RGB array (r,g,b per vertex)
+    const idx3 = i * 3;
+    const hasTrail = colors.length === altitudes.length * 3;
+    if (hasTrail) {
+      const r = colors[idx3] ?? 0;
+      const g = colors[idx3 + 1] ?? 0;
+      const b = colors[idx3 + 2] ?? 0;
+      const c = new Color(r, g, b);
+      // Average the two to keep trail visible with shading
+      const finalCol = shaded.clone().lerp(c, 0.6);
+      colorArray.push(finalCol.r, finalCol.g, finalCol.b);
+    } else {
+      colorArray.push(shaded.r, shaded.g, shaded.b);
+    }
+  }
+  geometry.setAttribute("color", new Float32BufferAttribute(colorArray, 3));
+
+  const end =
+    typeof performance !== "undefined" ? performance.now() : Date.now();
+  const vertexCount = positions.length / 3;
+  const triCount = indices.length / 3;
+  console.log(
+    `✅ Surface regenerated: vertices=${vertexCount}, triangles=${triCount}, took ${(
+      end - start
+    ).toFixed(1)}ms`,
+  );
+  return geometry;
+}
+
 /**
  * Alternative rendering method that creates a surface mesh
  * This can be more performant for large datasets
@@ -109,137 +262,18 @@ export function DenseTerrainSurface({
   highlightRadius = 5,
   segmentIndex,
 }: DenseTerrainSurfaceProps) {
-  const surfaceGeometry = useMemo(() => {
-    const start =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
-    console.log(
-      `🛠️ Regenerating surface… (resolution=${resolution}, densePoints=${densePoints.length})`,
-    );
-    const geometry = new BufferGeometry();
-
-    // Create a grid-based surface from the dense points
-    const { minX, maxX, minY, maxY, minZ, maxZ } = bounds;
-    const stepX = (maxX - minX) / resolution;
-    const stepY = (maxY - minY) / resolution;
-
-    const positions: number[] = [];
-    const indices: number[] = [];
-    const altitudes: number[] = [];
-    const colors: number[] = [];
-    const trailColor = new Color("#8B4513");
-
-    // Create vertices for the surface
-    for (let i = 0; i <= resolution; i++) {
-      for (let j = 0; j <= resolution; j++) {
-        const x = minX + i * stepX;
-        const y = minY + j * stepY;
-
-        // Find the closest dense point to get elevation
-        let closestZ = minZ;
-        let closestDistance = Infinity;
-
-        densePoints.forEach((point) => {
-          const distance = Math.sqrt((x - point.x) ** 2 + (y - point.y) ** 2);
-          if (distance < closestDistance) {
-            closestDistance = distance;
-            closestZ = point.z;
-          }
-        });
-
-        positions.push(x, closestZ, y);
-        altitudes.push(closestZ);
-        // proximity-based color blending to show trails on the surface
-        const trailness = isPointNearAnySegment(
-          segmentIndex,
-          x,
-          y,
-          highlightRadius,
-        )
-          ? 1
-          : 0;
-        // Mix base surface color with trail color based on trailness (0 or 1)
-        const baseCol = new Color(color);
-        const mixed = baseCol.clone().lerp(trailColor, trailness);
-        colors.push(mixed.r, mixed.g, mixed.b);
-      }
-    }
-
-    // Create triangles for the surface
-    for (let i = 0; i < resolution; i++) {
-      for (let j = 0; j < resolution; j++) {
-        const a = i * (resolution + 1) + j;
-        const b = a + 1;
-        const c = (i + 1) * (resolution + 1) + j;
-        const d = c + 1;
-
-        // First triangle
-        indices.push(a, b, c);
-        // Second triangle
-        indices.push(b, d, c);
-      }
-    }
-
-    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
-    geometry.setIndex(indices);
-    geometry.computeVertexNormals();
-
-    // Build subtle vertex colors using altitude and very gentle slope contrast (from normals)
-    let normalsAttr = geometry.getAttribute("normal");
-    if (!normalsAttr) {
-      geometry.computeVertexNormals();
-      normalsAttr = geometry.getAttribute("normal");
-    }
-    const normals = normalsAttr as Float32BufferAttribute;
-    const colorArray: number[] = [];
-    const base = new Color(color);
-    const baseHSL = { h: 0, s: 0, l: 0 } as { h: number; s: number; l: number };
-    base.getHSL(baseHSL);
-    const denom = Math.max(1e-6, maxZ - minZ);
-    for (let i = 0; i < altitudes.length; i++) {
-      const alt = altitudes[i] ?? minZ;
-      const tAlt = Math.min(1, Math.max(0, (alt - minZ) / denom));
-      const ny = Math.max(0, Math.min(1, normals.getY(i)));
-      const slope = 1 - ny; // 0 flat, 1 vertical
-
-      // Much gentler shading: minimal darkening on steep slopes
-      const lightness = Math.max(
-        0,
-        Math.min(1, baseHSL.l * 0.92 + tAlt * 0.12 - slope * 0.04),
-      );
-      const saturation = Math.max(
-        0,
-        Math.min(1, baseHSL.s * 0.98 + slope * 0.06),
-      );
-      // Combine subtle shading with trail color by lerping towards existing trail-mixed color
-      const shaded = new Color().setHSL(baseHSL.h, saturation, lightness);
-      // component offset into flat RGB array (r,g,b per vertex)
-      const idx3 = i * 3;
-      const hasTrail = colors.length === altitudes.length * 3;
-      if (hasTrail) {
-        const r = colors[idx3] ?? 0;
-        const g = colors[idx3 + 1] ?? 0;
-        const b = colors[idx3 + 2] ?? 0;
-        const c = new Color(r, g, b);
-        // Average the two to keep trail visible with shading
-        const finalCol = shaded.clone().lerp(c, 0.6);
-        colorArray.push(finalCol.r, finalCol.g, finalCol.b);
-      } else {
-        colorArray.push(shaded.r, shaded.g, shaded.b);
-      }
-    }
-    geometry.setAttribute("color", new Float32BufferAttribute(colorArray, 3));
-
-    const end =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
-    const vertexCount = positions.length / 3;
-    const triCount = indices.length / 3;
-    console.log(
-      `✅ Surface regenerated: vertices=${vertexCount}, triangles=${triCount}, took ${(
-        end - start
-      ).toFixed(1)}ms`,
-    );
-    return geometry;
-  }, [densePoints, bounds, resolution, color, highlightRadius, segmentIndex]);
+  const surfaceGeometry = useMemo(
+    () =>
+      buildSurfaceGeometry({
+        densePoints,
+        bounds,
+        resolution,
+        color,
+        highlightRadius,
+        segmentIndex,
+      }),
+    [densePoints, bounds, resolution, color, highlightRadius, segmentIndex],
+  );
 
   return (
     <mesh geometry={surfaceGeometry}>
@@ -267,6 +301,210 @@ interface AdaptiveTerrainSurfaceProps {
 
 // legacy per-activity proximity logic removed in favor of segment index
 
+type AdaptiveGeometryParams = Pick<
+  AdaptiveTerrainSurfaceProps,
+  "densePoints" | "maxEdgeLength" | "mapBounds" | "segmentIndex"
+> & { color: string };
+
+// Builds the triangulated surface outside render so the timing log's clock
+// reads stay out of the component. The geometry depends only on the params.
+function buildAdaptiveGeometry({
+  densePoints,
+  color,
+  maxEdgeLength,
+  mapBounds,
+  segmentIndex,
+}: AdaptiveGeometryParams): BufferGeometry {
+  const start =
+    typeof performance !== "undefined" ? performance.now() : Date.now();
+  console.log(
+    `🛠️ Regenerating adaptive surface… (points=${densePoints.length})`,
+  );
+
+  const geom = new BufferGeometry();
+  if (densePoints.length < 3) {
+    return geom;
+  }
+
+  // Estimate max edge length once (used for rim spacing if provided)
+  const maxEdge = maxEdgeLength ?? estimateMaxEdgeLengthFromPoints(densePoints);
+
+  // Optionally augment with a boundary rim prior to triangulation so the
+  // surface properly reaches the map edges. Rim vertices get z sampled from
+  // nearest dense point to avoid a flat zero-height border.
+  let augmentedPoints: DensePoint[] = densePoints;
+  let denseCount = densePoints.length;
+  if (mapBounds) {
+    const { minX, maxX, minY, maxY } = mapBounds;
+    const rimStep = Math.max(1e-3, maxEdge / 2);
+
+    // Build a lightweight spatial index over existing dense points for nearest z sampling
+    const kd = new KDBush(densePoints.length, 16, Float32Array);
+    for (const p of densePoints) kd.add(p.x, p.y);
+    kd.finish();
+    let sumZ = 0;
+    for (const p of densePoints) sumZ += p.z;
+    const avgZ = densePoints.length ? sumZ / densePoints.length : 0;
+    const searchR = Math.max(rimStep * 4, maxEdge * 2);
+    const searchR2 = searchR * searchR;
+    const sampleZ = (x: number, y: number): number => {
+      const ids = kd.range(x - searchR, y - searchR, x + searchR, y + searchR);
+      if (!ids.length) return avgZ;
+      let bestD2 = Infinity;
+      let bestZ = avgZ;
+      for (const id of ids) {
+        const s = densePoints[id]!;
+        const dx = s.x - x;
+        const dy = s.y - y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < bestD2 && d2 <= searchR2) {
+          bestD2 = d2;
+          bestZ = s.z;
+        }
+      }
+      return bestZ;
+    };
+
+    const rimPoints: DensePoint[] = [];
+    // Top and bottom edges
+    for (let x = minX; x <= maxX; x += rimStep) {
+      rimPoints.push({ x, y: minY, z: sampleZ(x, minY), lat: 0, lng: 0 });
+      rimPoints.push({ x, y: maxY, z: sampleZ(x, maxY), lat: 0, lng: 0 });
+    }
+    // Left and right edges
+    for (let y = minY; y <= maxY; y += rimStep) {
+      rimPoints.push({ x: minX, y, z: sampleZ(minX, y), lat: 0, lng: 0 });
+      rimPoints.push({ x: maxX, y, z: sampleZ(maxX, y), lat: 0, lng: 0 });
+    }
+    // Also add a sparse interior scaffold grid to bridge large gaps between clusters
+    const width = maxX - minX;
+    const height = maxY - minY;
+    const gridStep = Math.max(maxEdge, Math.max(width, height) / 24);
+    const scaffold: DensePoint[] = [];
+    for (let x = minX; x <= maxX; x += gridStep) {
+      for (let y = minY; y <= maxY; y += gridStep) {
+        scaffold.push({ x, y, z: sampleZ(x, y), lat: 0, lng: 0 });
+      }
+    }
+    const extras = rimPoints.concat(scaffold);
+    if (extras.length > 0) {
+      augmentedPoints = densePoints.concat(extras);
+      denseCount = densePoints.length;
+    }
+  }
+
+  // Positions: use augmented order for vertex buffer
+  const positions = Float32Array.from(
+    augmentedPoints.flatMap((p) => [p.x, p.z, p.y]),
+  );
+  geom.setAttribute("position", new Float32BufferAttribute(positions, 3));
+
+  // Delaunay triangulation over XY (use augmented points)
+  const coords = buildDelaunayCoords(augmentedPoints);
+  const delaunay = new Delaunator(coords);
+  // Triangle index buffer (triplets of vertex indices)
+  const triangleIndices: number[] = [];
+
+  const tris: Uint32Array = delaunay.triangles;
+  for (let t = 0; t < tris.length; t += 3) {
+    const a = tris[t] ?? 0;
+    const b = tris[t + 1] ?? 0;
+    const c = tris[t + 2] ?? 0;
+    const pa = augmentedPoints[a]!;
+    const pb = augmentedPoints[b]!;
+    const pc = augmentedPoints[c]!;
+    const ab = Math.hypot(pb.x - pa.x, pb.y - pa.y);
+    const bc = Math.hypot(pc.x - pb.x, pc.y - pb.y);
+    const ca = Math.hypot(pa.x - pc.x, pa.y - pc.y);
+    // Allow longer edges for triangles that touch synthetic points (rim/scaffold)
+    // so the surface always spans large gaps to the map bounds.
+    const touchesSynthetic =
+      a >= denseCount || b >= denseCount || c >= denseCount;
+    const globalLimit = mapBounds
+      ? Math.hypot(
+          mapBounds.maxX - mapBounds.minX,
+          mapBounds.maxY - mapBounds.minY,
+        )
+      : Infinity;
+    const edgeLimit = touchesSynthetic ? globalLimit : maxEdge * 12;
+    if (ab > edgeLimit || bc > edgeLimit || ca > edgeLimit) continue;
+    triangleIndices.push(a, b, c);
+  }
+  geom.setIndex(triangleIndices);
+  geom.computeVertexNormals();
+
+  // Build per-vertex colors: altitude/slope shading + trail proximity
+  let normalsAttr = geom.getAttribute("normal");
+  if (!normalsAttr) {
+    geom.computeVertexNormals();
+    normalsAttr = geom.getAttribute("normal");
+  }
+  const normals = normalsAttr as Float32BufferAttribute;
+  const colorArray: number[] = new Array(augmentedPoints.length * 3).fill(0);
+  const base = new Color(color);
+  const baseHSL = { h: 0, s: 0, l: 0 };
+  base.getHSL(baseHSL);
+  // altitude range approx from points
+  let minZ = Infinity,
+    maxZ = -Infinity;
+  for (const p of densePoints) {
+    if (p.z < minZ) minZ = p.z;
+    if (p.z > maxZ) maxZ = p.z;
+  }
+  const denom = Math.max(1e-6, maxZ - minZ);
+
+  // Optional trail proximity coloring
+  const trailColor = new Color("#8B4513"); // brown
+  const onTrailMask: boolean[] = new Array(augmentedPoints.length).fill(false);
+  // Widen trail radius noticeably so trails read clearly from a distance
+  const rTrail = Math.max(1e-3, (maxEdgeLength ?? maxEdge) * 0.11);
+  for (let i = 0; i < augmentedPoints.length; i++) {
+    const vx = augmentedPoints[i]!.x;
+    const vy = augmentedPoints[i]!.y;
+    onTrailMask[i] = isPointNearAnySegment(segmentIndex, vx, vy, rTrail);
+  }
+
+  for (let i = 0; i < augmentedPoints.length; i++) {
+    const p = augmentedPoints[i]!;
+    const tAlt = Math.min(1, Math.max(0, (p.z - minZ) / denom));
+    const ny = Math.max(0, Math.min(1, normals.getY(i)));
+    const slope = 1 - ny;
+    // Much gentler shading: minimal darkening on steep slopes
+    const lightness = Math.max(
+      0,
+      Math.min(1, baseHSL.l * 0.92 + tAlt * 0.12 - slope * 0.04),
+    );
+    const saturation = Math.max(
+      0,
+      Math.min(1, baseHSL.s * 0.98 + slope * 0.06),
+    );
+    const shaded = new Color().setHSL(baseHSL.h, saturation, lightness);
+    // component offset into flat RGB array (r,g,b per vertex)
+    const idx3 = i * 3;
+    if (onTrailMask[i]) {
+      // Draw trails as pure brown, no blending with base color
+      colorArray[idx3] = trailColor.r;
+      colorArray[idx3 + 1] = trailColor.g;
+      colorArray[idx3 + 2] = trailColor.b;
+    } else {
+      colorArray[idx3] = shaded.r;
+      colorArray[idx3 + 1] = shaded.g;
+      colorArray[idx3 + 2] = shaded.b;
+    }
+  }
+  geom.setAttribute("color", new Float32BufferAttribute(colorArray, 3));
+
+  const end =
+    typeof performance !== "undefined" ? performance.now() : Date.now();
+  console.log(
+    `✅ Adaptive surface regenerated: vertices=${densePoints.length}, triangles=${triangleIndices.length / 3}, took ${(
+      end - start
+    ).toFixed(1)}ms`,
+  );
+
+  return geom;
+}
+
 export function AdaptiveTerrainSurface({
   densePoints,
   color = "#4ade80",
@@ -276,204 +514,17 @@ export function AdaptiveTerrainSurface({
   mapBounds,
   segmentIndex,
 }: AdaptiveTerrainSurfaceProps) {
-  const geometry = useMemo(() => {
-    const start =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
-    console.log(
-      `🛠️ Regenerating adaptive surface… (points=${densePoints.length})`,
-    );
-
-    const geom = new BufferGeometry();
-    if (densePoints.length < 3) {
-      return geom;
-    }
-
-    // Estimate max edge length once (used for rim spacing if provided)
-    const maxEdge =
-      maxEdgeLength ?? estimateMaxEdgeLengthFromPoints(densePoints);
-
-    // Optionally augment with a boundary rim prior to triangulation so the
-    // surface properly reaches the map edges. Rim vertices get z sampled from
-    // nearest dense point to avoid a flat zero-height border.
-    let augmentedPoints: DensePoint[] = densePoints;
-    let denseCount = densePoints.length;
-    if (mapBounds) {
-      const { minX, maxX, minY, maxY } = mapBounds;
-      const rimStep = Math.max(1e-3, maxEdge / 2);
-
-      // Build a lightweight spatial index over existing dense points for nearest z sampling
-      const kd = new KDBush(densePoints.length, 16, Float32Array);
-      for (const p of densePoints) kd.add(p.x, p.y);
-      kd.finish();
-      let sumZ = 0;
-      for (const p of densePoints) sumZ += p.z;
-      const avgZ = densePoints.length ? sumZ / densePoints.length : 0;
-      const searchR = Math.max(rimStep * 4, maxEdge * 2);
-      const searchR2 = searchR * searchR;
-      const sampleZ = (x: number, y: number): number => {
-        const ids = kd.range(
-          x - searchR,
-          y - searchR,
-          x + searchR,
-          y + searchR,
-        );
-        if (!ids.length) return avgZ;
-        let bestD2 = Infinity;
-        let bestZ = avgZ;
-        for (const id of ids) {
-          const s = densePoints[id]!;
-          const dx = s.x - x;
-          const dy = s.y - y;
-          const d2 = dx * dx + dy * dy;
-          if (d2 < bestD2 && d2 <= searchR2) {
-            bestD2 = d2;
-            bestZ = s.z;
-          }
-        }
-        return bestZ;
-      };
-
-      const rimPoints: DensePoint[] = [];
-      // Top and bottom edges
-      for (let x = minX; x <= maxX; x += rimStep) {
-        rimPoints.push({ x, y: minY, z: sampleZ(x, minY), lat: 0, lng: 0 });
-        rimPoints.push({ x, y: maxY, z: sampleZ(x, maxY), lat: 0, lng: 0 });
-      }
-      // Left and right edges
-      for (let y = minY; y <= maxY; y += rimStep) {
-        rimPoints.push({ x: minX, y, z: sampleZ(minX, y), lat: 0, lng: 0 });
-        rimPoints.push({ x: maxX, y, z: sampleZ(maxX, y), lat: 0, lng: 0 });
-      }
-      // Also add a sparse interior scaffold grid to bridge large gaps between clusters
-      const width = maxX - minX;
-      const height = maxY - minY;
-      const gridStep = Math.max(maxEdge, Math.max(width, height) / 24);
-      const scaffold: DensePoint[] = [];
-      for (let x = minX; x <= maxX; x += gridStep) {
-        for (let y = minY; y <= maxY; y += gridStep) {
-          scaffold.push({ x, y, z: sampleZ(x, y), lat: 0, lng: 0 });
-        }
-      }
-      const extras = rimPoints.concat(scaffold);
-      if (extras.length > 0) {
-        augmentedPoints = densePoints.concat(extras);
-        denseCount = densePoints.length;
-      }
-    }
-
-    // Positions: use augmented order for vertex buffer
-    const positions = Float32Array.from(
-      augmentedPoints.flatMap((p) => [p.x, p.z, p.y]),
-    );
-    geom.setAttribute("position", new Float32BufferAttribute(positions, 3));
-
-    // Delaunay triangulation over XY (use augmented points)
-    const coords = buildDelaunayCoords(augmentedPoints);
-    const delaunay = new Delaunator(coords as ArrayLike<number>);
-    // Triangle index buffer (triplets of vertex indices)
-    const triangleIndices: number[] = [];
-
-    const tris: Uint32Array = delaunay.triangles;
-    for (let t = 0; t < tris.length; t += 3) {
-      const a = tris[t] ?? 0;
-      const b = tris[t + 1] ?? 0;
-      const c = tris[t + 2] ?? 0;
-      const pa = augmentedPoints[a]!;
-      const pb = augmentedPoints[b]!;
-      const pc = augmentedPoints[c]!;
-      const ab = Math.hypot(pb.x - pa.x, pb.y - pa.y);
-      const bc = Math.hypot(pc.x - pb.x, pc.y - pb.y);
-      const ca = Math.hypot(pa.x - pc.x, pa.y - pc.y);
-      // Allow longer edges for triangles that touch synthetic points (rim/scaffold)
-      // so the surface always spans large gaps to the map bounds.
-      const touchesSynthetic =
-        a >= denseCount || b >= denseCount || c >= denseCount;
-      const globalLimit = mapBounds
-        ? Math.hypot(
-            mapBounds.maxX - mapBounds.minX,
-            mapBounds.maxY - mapBounds.minY,
-          )
-        : Infinity;
-      const edgeLimit = touchesSynthetic ? globalLimit : maxEdge * 12;
-      if (ab > edgeLimit || bc > edgeLimit || ca > edgeLimit) continue;
-      triangleIndices.push(a, b, c);
-    }
-    geom.setIndex(triangleIndices);
-    geom.computeVertexNormals();
-
-    // Build per-vertex colors: altitude/slope shading + trail proximity
-    let normalsAttr = geom.getAttribute("normal");
-    if (!normalsAttr) {
-      geom.computeVertexNormals();
-      normalsAttr = geom.getAttribute("normal");
-    }
-    const normals = normalsAttr as Float32BufferAttribute;
-    const colorArray: number[] = new Array(augmentedPoints.length * 3).fill(0);
-    const base = new Color(color);
-    const baseHSL = { h: 0, s: 0, l: 0 } as { h: number; s: number; l: number };
-    base.getHSL(baseHSL);
-    // altitude range approx from points
-    let minZ = Infinity,
-      maxZ = -Infinity;
-    for (const p of densePoints) {
-      if (p.z < minZ) minZ = p.z;
-      if (p.z > maxZ) maxZ = p.z;
-    }
-    const denom = Math.max(1e-6, maxZ - minZ);
-
-    // Optional trail proximity coloring
-    const trailColor = new Color("#8B4513"); // brown
-    const onTrailMask: boolean[] = new Array(augmentedPoints.length).fill(
-      false,
-    );
-    // Widen trail radius noticeably so trails read clearly from a distance
-    const rTrail = Math.max(1e-3, (maxEdgeLength ?? maxEdge) * 0.11);
-    for (let i = 0; i < augmentedPoints.length; i++) {
-      const vx = augmentedPoints[i]!.x;
-      const vy = augmentedPoints[i]!.y;
-      onTrailMask[i] = isPointNearAnySegment(segmentIndex, vx, vy, rTrail);
-    }
-
-    for (let i = 0; i < augmentedPoints.length; i++) {
-      const p = augmentedPoints[i]!;
-      const tAlt = Math.min(1, Math.max(0, (p.z - minZ) / denom));
-      const ny = Math.max(0, Math.min(1, normals.getY(i)));
-      const slope = 1 - ny;
-      // Much gentler shading: minimal darkening on steep slopes
-      const lightness = Math.max(
-        0,
-        Math.min(1, baseHSL.l * 0.92 + tAlt * 0.12 - slope * 0.04),
-      );
-      const saturation = Math.max(
-        0,
-        Math.min(1, baseHSL.s * 0.98 + slope * 0.06),
-      );
-      const shaded = new Color().setHSL(baseHSL.h, saturation, lightness);
-      // component offset into flat RGB array (r,g,b per vertex)
-      const idx3 = i * 3;
-      if (onTrailMask[i]) {
-        // Draw trails as pure brown, no blending with base color
-        colorArray[idx3] = trailColor.r;
-        colorArray[idx3 + 1] = trailColor.g;
-        colorArray[idx3 + 2] = trailColor.b;
-      } else {
-        colorArray[idx3] = shaded.r;
-        colorArray[idx3 + 1] = shaded.g;
-        colorArray[idx3 + 2] = shaded.b;
-      }
-    }
-    geom.setAttribute("color", new Float32BufferAttribute(colorArray, 3));
-
-    const end =
-      typeof performance !== "undefined" ? performance.now() : Date.now();
-    console.log(
-      `✅ Adaptive surface regenerated: vertices=${densePoints.length}, triangles=${triangleIndices.length / 3}, took ${(
-        end - start
-      ).toFixed(1)}ms`,
-    );
-
-    return geom;
-  }, [densePoints, color, maxEdgeLength, mapBounds, segmentIndex]);
+  const geometry = useMemo(
+    () =>
+      buildAdaptiveGeometry({
+        densePoints,
+        color,
+        maxEdgeLength,
+        mapBounds,
+        segmentIndex,
+      }),
+    [densePoints, color, maxEdgeLength, mapBounds, segmentIndex],
+  );
 
   return (
     <mesh geometry={geometry}>

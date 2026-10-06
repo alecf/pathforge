@@ -1,7 +1,7 @@
 import polyline from "@mapbox/polyline";
 import * as d3 from "d3";
 import { useMemo } from "react";
-import { type DetailedActivityResponse } from "strava-v3";
+import type { DetailedActivity } from "strava-v3";
 import type { StravaActivityStream } from "~/server/api/routers/strava";
 import { api } from "~/trpc/react";
 import { useStable } from "~/util/useStable";
@@ -25,7 +25,7 @@ export interface ProjectedPoint {
 }
 
 export interface ProjectedActivity {
-  id: string;
+  id: string | number;
   name: string;
   points: ProjectedPoint[];
   color: string;
@@ -43,7 +43,7 @@ export interface AltitudeStream extends StravaActivityStream {
 }
 
 // New interface for activities with streams data
-export interface ActivityWithStreams extends DetailedActivityResponse {
+export interface ActivityWithStreams extends DetailedActivity {
   detailedPoints?: Array<{
     lng: number;
     lat: number;
@@ -58,7 +58,7 @@ export interface ActivityWithStreams extends DetailedActivityResponse {
 function isLatLngStream(
   stream: StravaActivityStream | undefined,
 ): stream is LatLngStream {
-  if (!stream || stream.type !== "latlng") return false;
+  if (stream?.type !== "latlng") return false;
   const data = stream.data;
   if (!Array.isArray(data)) return false;
   if (data.length === 0) return true;
@@ -69,7 +69,7 @@ function isLatLngStream(
 function isAltitudeStream(
   stream: StravaActivityStream | undefined,
 ): stream is AltitudeStream {
-  if (!stream || stream.type !== "altitude") return false;
+  if (stream?.type !== "altitude") return false;
   const data = stream.data;
   if (!Array.isArray(data)) return false;
   if (data.length === 0) return true;
@@ -109,7 +109,7 @@ export function decodePolyline(
  * Prioritizes streams data over polylines for more accurate coordinates and altitude
  */
 export function getActivityRouteData(
-  activity: DetailedActivityResponse | ActivityWithStreams,
+  activity: DetailedActivity | ActivityWithStreams,
 ) {
   // First try to use streams data if available (most accurate)
   if (
@@ -143,7 +143,7 @@ export function getActivityRouteData(
  * @returns D3 geo projection
  */
 export function createProjection(
-  activities: (DetailedActivityResponse | ActivityWithStreams)[],
+  activities: (DetailedActivity | ActivityWithStreams)[],
   width: number,
   height: number,
 ) {
@@ -233,7 +233,7 @@ export function createProjection(
  * @returns Array of projected activities with x/y/z coordinates
  */
 export function projectActivities(
-  activities: (DetailedActivityResponse | ActivityWithStreams)[],
+  activities: (DetailedActivity | ActivityWithStreams)[],
   projection: d3.GeoProjection,
 ): ProjectedActivity[] {
   const colors = d3.schemeCategory10;
@@ -379,8 +379,8 @@ export function useDetailedActivitiesWithStreams(activityIds: string[]) {
       let altitudeRes: string | undefined;
 
       if (Array.isArray(streams)) {
-        const latlng = streams.find((s) => s && s.type === "latlng");
-        const altitude = streams.find((s) => s && s.type === "altitude");
+        const latlng = streams.find((s) => s?.type === "latlng");
+        const altitude = streams.find((s) => s?.type === "altitude");
         if (isLatLngStream(latlng)) {
           latlngData = latlng.data;
           latlngRes = latlng.resolution;
@@ -601,8 +601,6 @@ export function useActivitiesPages(options: {
 /**
  * Helper function to extract activity IDs from basic activity data
  */
-export function getActivityIds(
-  activities: DetailedActivityResponse[],
-): string[] {
+export function getActivityIds(activities: DetailedActivity[]): string[] {
   return activities.map((activity) => activity.id.toString());
 }

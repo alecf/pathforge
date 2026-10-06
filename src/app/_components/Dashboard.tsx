@@ -2,12 +2,12 @@
 
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { type DetailedActivityResponse } from "strava-v3";
+import type { DetailedActivity } from "strava-v3";
 import { sportTypeTitles } from "~/types/sportTypeTitles";
 import { useActivities, type ActivityWithStreams } from "./ActivityMapUtils";
 
 interface ActivityCardProps {
-  activity: DetailedActivityResponse | ActivityWithStreams;
+  activity: DetailedActivity | ActivityWithStreams;
 }
 
 function ActivityCard({ activity }: ActivityCardProps) {

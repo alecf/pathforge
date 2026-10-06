@@ -1,17 +1,13 @@
-import { FlatCompat } from "@eslint/eslintrc";
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import tseslint from "typescript-eslint";
 // @ts-ignore -- no types for this plugin
 import drizzle from "eslint-plugin-drizzle";
 
-const compat = new FlatCompat({
-  baseDirectory: import.meta.dirname,
-});
-
 export default tseslint.config(
   {
-    ignores: [".next"],
+    ignores: [".next", "src/strava-client/**"],
   },
-  ...compat.extends("next/core-web-vitals"),
+  ...nextCoreWebVitals,
   {
     files: ["**/*.ts", "**/*.tsx"],
     plugins: {
@@ -29,6 +25,10 @@ export default tseslint.config(
         "warn",
         { prefer: "type-imports", fixStyle: "inline-type-imports" },
       ],
+      // With verbatimModuleSyntax, `import { type X } from "m"` still emits
+      // `import "m"`. Turbopack then pulls server-only modules (postgres,
+      // strava-v3) into client bundles. Require `import type` instead.
+      "@typescript-eslint/no-import-type-side-effects": "error",
       "@typescript-eslint/no-unused-vars": [
         "warn",
         { argsIgnorePattern: "^_" },

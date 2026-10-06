@@ -1,6 +1,6 @@
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { sql } from "drizzle-orm";
-import { type DefaultSession, type NextAuthConfig } from "next-auth";
+import type { DefaultSession, NextAuthConfig } from "next-auth";
 import StravaProvider from "next-auth/providers/strava";
 
 import { env } from "~/env";

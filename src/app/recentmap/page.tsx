@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { type DetailedActivityResponse } from "strava-v3";
+import type { DetailedActivity } from "strava-v3";
 import { ActivityList } from "../_components/ActivityList";
 import { ActivityMapTabs } from "../_components/ActivityMapTabs";
 import {
@@ -24,7 +24,7 @@ export default function RecentMapPage() {
   } = useActivitiesPages({ per_page: PER_PAGE, pageCount: pages });
 
   const [filteredActivities, setFilteredActivities] = useState<
-    (DetailedActivityResponse | ActivityWithStreams)[]
+    (DetailedActivity | ActivityWithStreams)[]
   >([]);
 
   // Initialize filtered activities once when activities first load to avoid

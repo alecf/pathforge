@@ -1,6 +1,6 @@
 import {
   default as stravaApi,
-  type DetailedActivityResponse,
+  type DetailedActivity,
   type Strava,
 } from "strava-v3";
 import { z } from "zod";
@@ -61,7 +61,7 @@ export const stravaRouter = createTRPCRouter({
         console.log("listing activities with input", input);
         const activities = await strava.athlete.listActivities(input ?? {});
 
-        return activities as DetailedActivityResponse[];
+        return activities as DetailedActivity[];
       }),
 
     getActivity: protectedProcedure
@@ -116,12 +116,10 @@ export const stravaRouter = createTRPCRouter({
         const strava = createStravaClient(accessToken);
 
         try {
-          // The strava-v3 client expects 'types' as a comma-separated string
-          const types = (input.keys ?? ["latlng", "altitude"]).join(",");
           const streams = await strava.streams.activity({
             id: input.id,
-            types,
-            key_by_type: true,
+            keys: input.keys ?? ["latlng", "altitude"],
+            key_by_type: input.key_by_type,
             resolution: input.resolution ?? "medium",
           });
 
@@ -187,7 +185,7 @@ export const stravaRouter = createTRPCRouter({
             r,
           ): r is {
             id: string;
-            activity: DetailedActivityResponse;
+            activity: DetailedActivity;
             success: true;
           } => r.success,
         );
@@ -211,4 +209,4 @@ function createStravaClient(accessToken: string): Strava {
   ).client(accessToken);
 }
 
-export type SportType = DetailedActivityResponse["sport_type"];
+export type SportType = DetailedActivity["sport_type"];

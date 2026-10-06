@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { type DetailedActivityResponse } from "strava-v3";
+import type { DetailedActivity } from "strava-v3";
 import { sportTypeTitles } from "~/types/sportTypeTitles";
 
 // Helper function to convert meters to miles
@@ -10,8 +10,8 @@ function metersToMiles(meters: number): number {
 }
 
 interface ActivityListProps {
-  activities: DetailedActivityResponse[];
-  onFilterChange: (filteredActivities: DetailedActivityResponse[]) => void;
+  activities: DetailedActivity[];
+  onFilterChange: (filteredActivities: DetailedActivity[]) => void;
   onLoadMore?: () => void;
   isLoadingMore?: boolean;
 }
