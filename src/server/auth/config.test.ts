@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { accounts, users } from "~/server/db/schema";
-import { authConfig } from "./config";
+import { createAuthConfig } from "./config";
 
 /**
  * `~/server/db` normally opens a postgres-js pool against DATABASE_URL. Swap it
@@ -12,10 +12,11 @@ import { authConfig } from "./config";
 vi.mock("~/server/db", async () => {
   const { createTestDatabase } = await import("~/test/pglite");
   const testDb = await createTestDatabase();
-  return { db: testDb.db };
+  return { getDb: () => testDb.db };
 });
 
-const { db } = await import("~/server/db");
+const db = (await import("~/server/db")).getDb();
+const authConfig = createAuthConfig();
 
 type Callbacks = NonNullable<typeof authConfig.callbacks>;
 type JwtArgs = Parameters<NonNullable<Callbacks["jwt"]>>[0];

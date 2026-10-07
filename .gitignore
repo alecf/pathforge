@@ -46,3 +46,9 @@ yarn-error.log*
 .idea
 .venv/
 .tfjs-env/
+
+# cloudflare
+.open-next
+.wrangler
+.dev.vars*
+!.dev.vars.example

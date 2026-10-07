@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { env } from "~/env";
-import { db } from "~/server/db";
+import { getDb } from "~/server/db";
 import { accounts } from "~/server/db/schema";
 import { auth } from "./index";
 
@@ -58,6 +58,7 @@ async function refreshStravaToken(refreshToken: string) {
 export async function getStravaAccessToken(
   userId: string,
 ): Promise<string | null> {
+  const db = getDb();
   try {
     console.log("Getting Strava access token for user:", userId);
 

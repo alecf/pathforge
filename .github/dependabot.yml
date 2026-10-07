@@ -6,6 +6,11 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+    ignore:
+      # @opennextjs/cloudflare 500s on Next 16.4 (preview-props.json manifest).
+      # Drop this once opennextjs/opennextjs-cloudflare#1356 ships.
+      - dependency-name: "next"
+        versions: [">=16.4.0"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

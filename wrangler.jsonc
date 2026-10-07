@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pathforge",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "pathforge"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  // Every page makes several queries, so run the Worker near the database
+  // rather than near the visitor.
+  "placement": {
+    "mode": "smart"
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      // Filled in by `wrangler hyperdrive create`.
+      // `npm run preview` / `wrangler dev` connect to
+      // CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE instead (see .env.example).
+      "id": "00000000000000000000000000000000"
+    }
+  ]
+}

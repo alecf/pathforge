@@ -8,14 +8,14 @@ import { getStravaAccessToken, getValidatedSession } from "./token-utils";
 vi.mock("~/server/db", async () => {
   const { createTestDatabase } = await import("~/test/pglite");
   const testDb = await createTestDatabase();
-  return { db: testDb.db };
+  return { getDb: () => testDb.db };
 });
 
 // `./index` calls NextAuth() at import time; the token helpers only need
 // `auth()`.
 vi.mock("./index", () => ({ auth: vi.fn() }));
 
-const { db } = await import("~/server/db");
+const db = (await import("~/server/db")).getDb();
 const { auth } = await import("./index");
 
 /**
