@@ -58,11 +58,12 @@ async function refreshStravaToken(refreshToken: string) {
 export async function getStravaAccessToken(
   userId: string,
 ): Promise<string | null> {
+  const db = getDb();
   try {
     console.log("Getting Strava access token for user:", userId);
 
     // Get the user's Strava account
-    const account = await getDb()
+    const account = await db
       .select()
       .from(accounts)
       .where(
@@ -105,7 +106,7 @@ export async function getStravaAccessToken(
           );
 
           // Update the account in the database
-          await getDb()
+          await db
             .update(accounts)
             .set({
               access_token: refreshedTokens.access_token,

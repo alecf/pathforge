@@ -4,12 +4,7 @@
  */
 import "./src/env.js";
 
-import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
-
 /** @type {import("next").NextConfig} */
 const config = {};
 
 export default config;
-
-// Exposes Cloudflare bindings (e.g. HYPERDRIVE) to `next dev` via getCloudflareContext().
-void initOpenNextCloudflareForDev();

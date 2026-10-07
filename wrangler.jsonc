@@ -26,9 +26,9 @@
     {
       "binding": "HYPERDRIVE",
       // Filled in by `wrangler hyperdrive create`.
-      "id": "00000000000000000000000000000000",
-      // Used by `next dev` / `wrangler dev`; matches start-database.sh.
-      "localConnectionString": "postgresql://postgres:password@localhost:5432/strava-raceways"
+      // `npm run preview` / `wrangler dev` connect to
+      // CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE instead (see .env.example).
+      "id": "00000000000000000000000000000000"
     }
   ]
 }
