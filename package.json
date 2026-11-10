@@ -26,7 +26,7 @@
     "@auth/core": "^0.41.3",
     "@auth/drizzle-adapter": "^1.11.3",
     "@mapbox/polyline": "^1.2.1",
-    "@radix-ui/react-hover-card": "^1.1.15",
+    "@radix-ui/react-hover-card": "^1.2.1",
     "@radix-ui/react-tabs": "^1.1.12",
     "@radix-ui/react-tooltip": "^1.4.1",
     "@react-three/drei": "^10.7.9",
