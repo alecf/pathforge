@@ -6,6 +6,12 @@ updates:
       interval: "weekly"
     cooldown:
       default-days: 7
+    groups:
+      # The tRPC packages pin each other as exact peers, so a bump of one
+      # alone fails `npm ci`. Update them together.
+      trpc:
+        patterns:
+          - "@trpc/*"
 
   - package-ecosystem: "github-actions"
     directory: "/"
