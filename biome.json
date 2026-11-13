@@ -48,12 +48,7 @@
       },
       "suspicious": {
         "noExplicitAny": "error",
-        "noLeakedRender": "off"
-      },
-      "nursery": {
-        "noFloatingPromises": "error",
-        "noMisusedPromises": "error",
-        "useNullishCoalescing": "error",
+        "noLeakedRender": "off",
         "noDrizzleDeleteWithoutWhere": {
           "level": "error",
           "options": {
@@ -72,6 +67,11 @@
             ]
           }
         }
+      },
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noMisusedPromises": "error",
+        "useNullishCoalescing": "error"
       },
       "performance": {
         "noJsxPropsBind": "off"
