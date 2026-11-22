@@ -63,7 +63,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
     "@electric-sql/pglite": "^0.5.15",
-    "@tailwindcss/postcss": "^4.0.15",
+    "@tailwindcss/postcss": "^4.3.5",
     "@types/delaunator": "^5.1.0",
     "@types/mapbox__polyline": "^1.0.5",
     "@types/node": "^26.6.6",
